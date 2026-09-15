@@ -1,0 +1,192 @@
+"""REST contract, persistence, privacy, and failure tests."""
+
+import pytest
+
+from backend.app import create_app
+from backend.tests.conftest import FailingAIService, send
+
+
+def test_health_endpoint(client):
+    response = client.get("/health")
+    assert response.status_code == 200
+    assert response.get_json()["status"] == "ok"
+    assert response.get_json()["ai_configuration"] == {
+        "api_key_configured": False,
+        "model_configured": True,
+    }
+
+
+def test_backend_does_not_render_frontend(client):
+    assert client.get("/").status_code == 404
+
+
+def test_create_conversation(client):
+    response = client.post("/api/conversations")
+    payload = response.get_json()
+    assert response.status_code == 201
+    assert payload["conversation_id"]
+    assert payload["status"] == "active"
+    assert payload["created_at"].endswith("Z")
+
+
+def test_vite_origin_is_allowed(client):
+    response = client.options(
+        "/api/chat",
+        headers={
+            "Origin": "http://127.0.0.1:5173",
+            "Access-Control-Request-Method": "POST",
+        },
+    )
+    assert response.status_code == 200
+    assert response.headers["Access-Control-Allow-Origin"] == "http://127.0.0.1:5173"
+
+
+@pytest.mark.parametrize(
+    ("body", "content_type", "status", "code"),
+    [
+        ("plain", "text/plain", 415, "INVALID_CONTENT_TYPE"),
+        ("[]", "application/json", 400, "INVALID_JSON"),
+        ('{"message": 42}', "application/json", 400, "INVALID_MESSAGE"),
+        ('{"message": "   ", "conversation_id": "x"}', "application/json", 400, "EMPTY_MESSAGE"),
+        ('{"message": "hello"}', "application/json", 400, "INVALID_CONVERSATION_ID"),
+    ],
+)
+def test_invalid_chat_requests(client, body, content_type, status, code):
+    response = client.post("/api/chat", data=body, content_type=content_type)
+    assert response.status_code == status
+    assert response.get_json()["error"]["code"] == code
+
+
+def test_unknown_conversation_is_rejected(client):
+    response = send(client, "not-a-real-id", "course duration")
+    assert response.status_code == 404
+    assert response.get_json()["error"]["code"] == "CONVERSATION_NOT_FOUND"
+
+
+def test_messages_are_persisted_and_reloadable(client, conversation_id):
+    assert send(client, conversation_id, "What is the course duration?").status_code == 200
+    history = client.get(f"/api/conversations/{conversation_id}/messages").get_json()
+    assert [message["role"] for message in history["messages"]] == ["user", "assistant"]
+    assert "two consecutive days" in history["messages"][1]["content"]
+
+
+def test_history_survives_a_new_application_instance(tmp_path, fake_ai):
+    database_uri = f"sqlite:///{(tmp_path / 'persistent.db').as_posix()}"
+    first_app = create_app(
+        {"TESTING": True, "SQLALCHEMY_DATABASE_URI": database_uri},
+        ai_service=fake_ai,
+    )
+    first_client = first_app.test_client()
+    conversation_id = first_client.post("/api/conversations").get_json()[
+        "conversation_id"
+    ]
+    send(first_client, conversation_id, "What is the course duration?")
+
+    second_app = create_app(
+        {"TESTING": True, "SQLALCHEMY_DATABASE_URI": database_uri},
+        ai_service=fake_ai,
+    )
+    reloaded = second_app.test_client().get(
+        f"/api/conversations/{conversation_id}/messages"
+    )
+    assert reloaded.status_code == 200
+    assert len(reloaded.get_json()["messages"]) == 2
+
+
+def test_enrollment_progress_survives_application_restart(tmp_path, fake_ai):
+    database_uri = f"sqlite:///{(tmp_path / 'resumable.db').as_posix()}"
+    first_app = create_app(
+        {"TESTING": True, "SQLALCHEMY_DATABASE_URI": database_uri},
+        ai_service=fake_ai,
+    )
+    first_client = first_app.test_client()
+    conversation_id = first_client.post("/api/conversations").get_json()[
+        "conversation_id"
+    ]
+    send(first_client, conversation_id, "I want to enroll")
+    send(first_client, conversation_id, "My name is Test Participant")
+
+    second_app = create_app(
+        {"TESTING": True, "SQLALCHEMY_DATABASE_URI": database_uri},
+        ai_service=fake_ai,
+    )
+    second_client = second_app.test_client()
+    history = second_client.get(
+        f"/api/conversations/{conversation_id}/messages"
+    ).get_json()
+    assert history["active_intent"] == "enrollment"
+    assert history["enrollment"]["status"] == "collecting"
+    assert "nric" in history["enrollment"]["missing_fields"]
+
+    resumed = send(
+        second_client, conversation_id, "My NRIC is S0000001A"
+    ).get_json()
+    assert "Test" in resumed["message"]["content"]
+    assert "date of birth" in resumed["message"]["content"].casefold()
+
+
+def test_nric_is_masked_in_history_and_classifier_prompt(client, conversation_id, fake_ai):
+    send(client, conversation_id, "I want to enroll")
+    send(client, conversation_id, "My NRIC is S1234567A")
+    history = client.get(f"/api/conversations/{conversation_id}/messages").get_json()
+    rendered = " ".join(message["content"] for message in history["messages"])
+    assert "S1234567A" not in rendered
+    assert "S*******A" in rendered
+    assert "S1234567A" not in fake_ai.classify_calls[-1]["message"]
+    assert "S1234567A" not in fake_ai.classify_calls[-1]["context"]
+
+
+def test_context_is_bounded(tmp_path, fake_ai):
+    app = create_app(
+        {
+            "TESTING": True,
+            "SQLALCHEMY_DATABASE_URI": f"sqlite:///{(tmp_path / 'bounded.db').as_posix()}",
+            "CONVERSATION_CONTEXT_MESSAGE_LIMIT": 3,
+        },
+        ai_service=fake_ai,
+    )
+    client = app.test_client()
+    conversation_id = client.post("/api/conversations").get_json()["conversation_id"]
+    for question in ("course duration?", "course fee?", "course location?", "course capacity?"):
+        send(client, conversation_id, question)
+    context_lines = fake_ai.classify_calls[-1]["context"].splitlines()
+    message_markers = [
+        line for line in context_lines if line.startswith(("user: ", "assistant: "))
+    ]
+    assert len(message_markers) <= 3
+
+
+def test_missing_api_configuration_returns_safe_error(tmp_path):
+    app = create_app(
+        {
+            "TESTING": True,
+            "OPENAI_API_KEY": "",
+            "OPENAI_MODEL": "",
+            "SQLALCHEMY_DATABASE_URI": f"sqlite:///{(tmp_path / 'missing.db').as_posix()}",
+        }
+    )
+    client = app.test_client()
+    conversation_id = client.post("/api/conversations").get_json()["conversation_id"]
+    response = send(client, conversation_id, "What is the fee?")
+    assert response.status_code == 503
+    assert response.get_json()["error"]["code"] == "AI_CONFIGURATION_ERROR"
+
+
+def test_provider_failure_does_not_leak_details_or_secret(tmp_path):
+    secret = "unit-test-secret-must-never-appear"
+    app = create_app(
+        {
+            "TESTING": True,
+            "OPENAI_API_KEY": secret,
+            "OPENAI_MODEL": "gpt-5-mini",
+            "SQLALCHEMY_DATABASE_URI": f"sqlite:///{(tmp_path / 'failure.db').as_posix()}",
+        },
+        ai_service=FailingAIService(),
+    )
+    client = app.test_client()
+    conversation_id = client.post("/api/conversations").get_json()["conversation_id"]
+    response = send(client, conversation_id, "What is the fee?")
+    rendered = response.get_data(as_text=True)
+    assert response.status_code == 502
+    assert "provider detail" not in rendered
+    assert secret not in rendered
