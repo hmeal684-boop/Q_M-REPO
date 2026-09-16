@@ -72,6 +72,23 @@ class CourseCatalogue:
     def payment_question(self):
         return self.course["enrollment"]["payment_question"]
 
+    @property
+    def enrollment_templates(self):
+        return self.course["enrollment"]["reply_templates"]
+
+    def enrollment_reply(self, template_name, **values):
+        """Render centrally maintained enrolment wording with validated values."""
+        return self.enrollment_templates[template_name].format(**values)
+
+    def enrollment_field_label(self, field):
+        return self.course["enrollment"]["field_labels"].get(
+            field, field.replace("_", " ").title()
+        )
+
+    @property
+    def enrollment_faq_resume_prompt(self):
+        return self.enrollment_templates["faq_resume"]
+
     def agent_context(self):
         return json.dumps(self._data, indent=2, ensure_ascii=False)
 

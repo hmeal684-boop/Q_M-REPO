@@ -84,21 +84,10 @@ class FakeAIService:
             "sign upp",
             "apply",
         )
-        is_question = "?" in message or lowered.startswith(
-            (
-                "what",
-                "wat",
-                "when",
-                "where",
-                "whr",
-                "can",
-                "could",
-                "how",
-                "hw",
-                "is",
-                "do",
-                "does",
-                "tell",
+        is_question = "?" in message or bool(
+            re.match(
+                r"^(?:what|wat|when|where|whr|can|could|how|hw|is|do|does|tell)\b",
+                lowered,
             )
         )
         asks_how_to_enroll = is_question and any(
@@ -154,7 +143,14 @@ class FakeAIService:
         topics = []
         asks_fee = any(term in lowered for term in ("fee", "fees", "cost", "much", "expensive"))
         asks_duration = any(term in lowered for term in ("duration", "how long", "time"))
-        if "mid-career" in lowered or "mid career" in lowered:
+        raises_fee_concern = any(
+            term in lowered
+            for term in ("expensive", "overpriced", "price so high", "cost so much")
+        )
+        if raises_fee_concern:
+            topics = ["course fee concern"]
+            answer = faq_answers["course fee concern"]
+        elif "mid-career" in lowered or "mid career" in lowered:
             topics = ["Mid-Career SkillsFuture"]
             answer = faq_answers["Mid-Career SkillsFuture"]
         elif any(term in lowered for term in ("skillsfuture", "skillfuture", "skilsfuture", "funding")):
@@ -226,12 +222,20 @@ class FakeAIService:
         fields = {}
 
         name_match = re.search(
-            r"(?:full\s+name|name)\s*(?:is|:)?\s*([A-Za-z][A-Za-z '\-]+?)(?=\s*(?:;|,|\band\b|$))",
+            r"(?:full\s+name|name)\s*(?:is|:)?\s*([A-Za-z][A-Za-z '\-]+?)(?=\s*(?:;|,|\band\b|\r?\n|$))",
             message,
             re.IGNORECASE,
         )
         if name_match:
             fields["full_name"] = name_match.group(1).strip()
+        else:
+            leading_name = re.match(
+                r"\s*([A-Za-z][A-Za-z '\-]+?),\s*[STFGM]\d{7}[A-Z]\b",
+                message,
+                re.IGNORECASE,
+            )
+            if leading_name:
+                fields["full_name"] = leading_name.group(1).strip()
 
         nric_match = re.search(r"\b[STFGM]\d{7}[A-Z]\b", message, re.IGNORECASE)
         if nric_match:
@@ -243,21 +247,32 @@ class FakeAIService:
         if email_match:
             fields["email"] = email_match.group(0)
         elif "email" in lowered:
-            fields["email"] = message.split()[-1].strip(".,;")
+            labelled_email = re.search(
+                r"email(?:\s+address)?\s*(?:is|:)?\s*([^,;\r\n]+)",
+                message,
+                re.IGNORECASE,
+            )
+            if labelled_email:
+                fields["email"] = labelled_email.group(1).strip()
 
         dob_match = re.search(
-            r"(?:dob|date of birth)\s*(?:is|:)?\s*([^,;]+)", message, re.IGNORECASE
+            r"(?:dob|date of birth|born)\s*(?:is|:)?\s*([^,;\r\n]+)",
+            message,
+            re.IGNORECASE,
         )
         if dob_match:
             fields["date_of_birth"] = dob_match.group(1).strip()
 
-        intake_match = re.search(
-            r"(?:intake|preferred date)\s*(?:is|:)?\s*([^,;]+)",
-            message,
-            re.IGNORECASE,
-        )
-        if intake_match:
-            fields["preferred_intake_date"] = intake_match.group(1).strip()
+        if "next available intake" in lowered:
+            fields["preferred_intake_date"] = "next available intake"
+        else:
+            intake_match = re.search(
+                r"(?:preferred\s+intake|intake|preferred date)\s*(?:is|:)?\s*([^,;\r\n]+)",
+                message,
+                re.IGNORECASE,
+            )
+            if intake_match:
+                fields["preferred_intake_date"] = intake_match.group(1).strip()
 
         mobile_match = re.search(
             r"(?:mobile|phone|hp)(?:\s+number)?\s*(?:is|:)?\s*(\+?65[\s-]?)?([89]\d{3}[\s-]?\d{4})",
@@ -268,6 +283,17 @@ class FakeAIService:
             fields["mobile_number"] = "".join(
                 part for part in mobile_match.groups() if part
             )
+        else:
+            labelled_mobile = re.search(
+                r"(?:mobile|phone|hp)(?:\s+number)?\s*(?:is|:)?\s*([^,;\r\n]+)",
+                message,
+                re.IGNORECASE,
+            )
+            bare_mobile = re.search(r"(?<!\d)([89]\d{7})(?!\d)", message)
+            if labelled_mobile:
+                fields["mobile_number"] = labelled_mobile.group(1).strip()
+            elif bare_mobile:
+                fields["mobile_number"] = bare_mobile.group(1)
 
         payment_terms = []
         if "mid-career" in lowered or "mid career" in lowered:

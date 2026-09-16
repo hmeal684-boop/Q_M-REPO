@@ -67,7 +67,7 @@ def test_messages_are_persisted_and_reloadable(client, conversation_id):
     assert send(client, conversation_id, "What is the course duration?").status_code == 200
     history = client.get(f"/api/conversations/{conversation_id}/messages").get_json()
     assert [message["role"] for message in history["messages"]] == ["user", "assistant"]
-    assert "two consecutive training days" in history["messages"][1]["content"]
+    assert "two consecutive training days" in history["messages"][1]["content"].casefold()
 
 
 def test_history_survives_a_new_application_instance(tmp_path, fake_ai):
