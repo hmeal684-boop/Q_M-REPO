@@ -62,7 +62,7 @@ class ChatService:
                 self.catalogue.venue_confirmation_required
                 and _is_venue_question(user_text)
             ):
-                reply = self.catalogue.venue_customer_reply
+                reply = self.catalogue.approved_faq_reply(["venue"])
             elif _is_utap_question(user_text):
                 reply = self.catalogue.approved_faq_reply(["UTAP"])
             else:
@@ -75,15 +75,13 @@ class ChatService:
             if draft and draft.status != "confirmed":
                 if name and reply != self.catalogue.no_intakes_message:
                     reply = _personalise_reply(reply, name)
-                continuation = "We can continue your enrolment whenever you’re ready."
+                continuation = self.catalogue.enrollment_faq_resume_prompt
                 reply += f"\n\n{continuation}"
             else:
                 if name and reply != self.catalogue.no_intakes_message:
                     reply = _personalise_reply(reply, name)
             if conversation.active_intent != "enrollment":
                 conversation.active_intent = "faq"
-                if "enroll" not in reply.casefold() and "enrol" not in reply.casefold():
-                    reply += "\n\nWould you like to begin an enrolment?"
         elif classification.intent == "enrollment":
             conversation.active_intent = "enrollment"
             reply, draft = self.enrollment.handle(
@@ -226,4 +224,4 @@ def _is_venue_question(message):
 def _personalise_reply(reply, first_name):
     if re.search(rf"(?i)\b{re.escape(first_name)}\b", reply):
         return reply
-    return f"Hi {first_name}. {reply}"
+    return f"Hi {first_name} 👋\n\n{reply}"

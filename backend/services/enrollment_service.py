@@ -51,6 +51,14 @@ class EnrollmentService:
             # the participant to explicitly confirm it before the record is final.
             draft.course = self.catalogue.course_name
 
+        intake_value = supplied_fields.get("preferred_intake_date")
+        if (
+            intake_value is not None
+            and not self.catalogue.has_intake_dates
+            and _is_awaiting_intake_confirmation(intake_value)
+        ):
+            supplied_fields.pop("preferred_intake_date")
+
         validation_errors = []
         validated_fields = {}
         for field in ENROLLMENT_FIELDS:
@@ -81,36 +89,41 @@ class EnrollmentService:
             draft.status = "collecting"
             draft.confirmed_at = None
 
-        if validation_errors:
-            field, error = validation_errors[0]
-            if field == "preferred_intake_date" and not self.catalogue.has_intake_dates:
-                return error, draft
-            return f"{self._name_prefix(draft)}{error}\n\n{self._question_for(field, draft)}", draft
-
         payment_error = self._payment_error(draft)
-        if payment_error:
-            return f"{self._name_prefix(draft)}{payment_error}", draft
+        missing = self.missing_fields(draft, self.catalogue)
+        invalid_fields = {field for field, _ in validation_errors}
+        missing_without_invalid = [
+            field for field in missing if field not in invalid_fields
+        ]
+        if validation_errors or payment_error:
+            draft.status = "collecting"
+            corrections = list(validation_errors)
+            if payment_error:
+                corrections.append(("payment_allocation", payment_error))
+            return (
+                self._validation_reply(
+                    draft, corrections, missing_without_invalid
+                ),
+                draft,
+            )
 
         if extraction.confirmation == "reject":
             draft.status = "collecting"
             draft.confirmed_at = None
             name = _first_name(draft.full_name)
             opening = f"No problem, {name}." if name else "No problem."
-            return (
-                f"{opening} "
-                "Your enrolment has not been confirmed. "
-                "Which detail would you like to correct?"
+            return self.catalogue.enrollment_reply(
+                "rejected", opening=opening
             ), draft
 
-        missing = self.missing_fields(draft, self.catalogue)
         if missing:
             draft.status = "collecting"
-            question = self._question_for(missing[0], draft)
-            if is_new_draft and missing[0] == "full_name":
-                question = "I’d be happy to help you enrol! ✅ May I have your full name?"
+            if is_new_draft and not self._has_participant_details(draft):
+                return self._introduction_reply(draft), draft
+            reply = self._partial_reply(draft, missing)
             if correction_acknowledgement:
-                question = f"{correction_acknowledgement}\n\n{question}"
-            return question, draft
+                reply = f"{correction_acknowledgement}\n\n{reply}"
+            return reply, draft
 
         if extraction.confirmation == "confirm" and draft.status == "awaiting_confirmation":
             draft.status = (
@@ -123,9 +136,8 @@ class EnrollmentService:
 
         if extraction.correction_requested and not supplied_fields:
             draft.status = "collecting"
-            return (
-                f"{self._name_prefix(draft)}Please tell me which detail to change and "
-                "provide the new value, for example: ‘Change my email to name@example.com’."
+            return self.catalogue.enrollment_reply(
+                "correction_request", name_prefix=self._name_prefix(draft)
             ), draft
 
         draft.status = "awaiting_confirmation"
@@ -141,39 +153,65 @@ class EnrollmentService:
             required.remove("preferred_intake_date")
         return [field for field in required if getattr(draft, field) is None]
 
-    def _question_for(self, field, draft=None):
-        questions = {
-            "course": (
-                f"Would you like to enrol in the {self.catalogue.course_name}?"
-            ),
-            "full_name": "May I have your full name?",
-            "nric": "Please provide your NRIC or FIN.",
-            "date_of_birth": "What is your date of birth?",
-            "email": "What email address should be used for this enrollment?",
-            "preferred_intake_date": (
-                "Which intake date do you prefer: "
-                + " or ".join(
-                    item["display"] for item in self.catalogue.course["intakes"]
+    def _introduction_reply(self, draft):
+        return self.catalogue.enrollment_reply(
+            "introduction", greeting=self._friendly_greeting(draft)
+        )
+
+    def _partial_reply(self, draft, missing):
+        items = "\n".join(
+            f"{index}. {self.catalogue.enrollment_field_label(field)}"
+            for index, field in enumerate(missing, start=1)
+        )
+        return self.catalogue.enrollment_reply(
+            "partial",
+            greeting=self._friendly_greeting(draft),
+            missing_items=items,
+        )
+
+    def _validation_reply(self, draft, corrections, missing):
+        sections = []
+        if corrections:
+            correction_items = "\n".join(
+                f"- {self.catalogue.enrollment_field_label(field)}: {error}"
+                for field, error in corrections
+            )
+            sections.append(
+                self.catalogue.enrollment_reply(
+                    "validation_corrections",
+                    correction_items=correction_items,
                 )
-                + "?"
-                if self.catalogue.has_intake_dates
-                else self.catalogue.no_intakes_message
-            ),
-            "mobile_number": "What mobile number should we use to contact you?",
-            "payment_method": self.catalogue.payment_question,
-            "skillsfuture_amount": (
-                "How much basic-tier SkillsFuture Credit will you use toward the "
-                f"{self.catalogue.course_fee_display} course fee?"
-            ),
-            "paynow_amount": self._paynow_question(draft),
-        }
-        question = questions[field]
-        if draft and draft.full_name and field != "full_name":
-            name = _first_name(draft.full_name)
-            if field == "nric":
-                return f"Thanks, {name}. {question}"
-            return f"{name}, {question[0].lower()}{question[1:]}"
-        return question
+            )
+        if missing:
+            missing_items = "\n".join(
+                f"- {self.catalogue.enrollment_field_label(field)}"
+                for field in missing
+            )
+            sections.append(
+                self.catalogue.enrollment_reply(
+                    "validation_missing", missing_items=missing_items
+                )
+            )
+        name = _first_name(draft.full_name)
+        greeting = f"Hi {name}" if name else "Hello"
+        return self.catalogue.enrollment_reply(
+            "validation",
+            greeting=greeting,
+            sections="\n\n".join(sections),
+        )
+
+    @staticmethod
+    def _friendly_greeting(draft):
+        name = _first_name(draft.full_name)
+        return f"Hi {name} 👋" if name else "Hi 👋"
+
+    @staticmethod
+    def _has_participant_details(draft):
+        return any(
+            getattr(draft, field) is not None
+            for field in ENROLLMENT_FIELDS
+            if field != "course"
+        )
 
     @staticmethod
     def _name_prefix(draft):
@@ -301,52 +339,47 @@ class EnrollmentService:
             return True
         return len(compact_value) >= 4 and compact_value in compact_message
 
-    @staticmethod
-    def _confirmation_summary(draft):
-        name = _first_name(draft.full_name)
-        heading = f"{name}, please" if name else "Please"
-        return (
-            f"{heading} confirm your enrolment details:\n\n"
-            f"Course: {draft.course}\n"
-            f"Full name: {draft.full_name}\n"
-            f"NRIC/FIN: {mask_nric(draft.nric)}\n"
-            f"Date of birth: {_display_date(draft.date_of_birth)}\n"
-            f"Email: {draft.email}\n"
-            f"Mobile number: {draft.mobile_number}\n"
-            f"Selected intake: {_display_date(draft.preferred_intake_date)}\n"
-            f"Payment option: {_payment_method_label(draft.payment_method)}\n"
-            f"SkillsFuture amount: {_display_amount(draft.skillsfuture_amount)}\n"
-            f"PayNow amount: {_display_amount(draft.paynow_amount)}\n\n"
-            "Please confirm that these details are correct, or tell me what to change."
+    def _confirmation_summary(self, draft):
+        total = Decimal(draft.skillsfuture_amount) + Decimal(draft.paynow_amount)
+        return self.catalogue.enrollment_reply(
+            "confirmation",
+            greeting=self._friendly_greeting(draft),
+            course_name=draft.course,
+            course_fee=self.catalogue.course_fee_display,
+            duration=self.catalogue.course["duration"].capitalize(),
+            training_time=self.catalogue.course["training_time"],
+            preferred_intake=_display_date(draft.preferred_intake_date),
+            full_name=draft.full_name,
+            masked_nric=mask_nric(draft.nric),
+            date_of_birth=_display_date(draft.date_of_birth),
+            email=draft.email,
+            mobile_number=draft.mobile_number,
+            payment_method=_payment_method_label(draft.payment_method),
+            skillsfuture_amount=_display_amount(draft.skillsfuture_amount),
+            paynow_amount=_display_amount(draft.paynow_amount),
+            payment_total=_display_amount(total),
         )
 
-    @staticmethod
-    def _confirmed_reply(draft):
+    def _confirmed_reply(self, draft):
         if draft.status == "awaiting_course_date":
-            return (
-                f"Thank you, {_first_name(draft.full_name)}. Your enrolment details "
-                "have been saved. Our upcoming course dates are being updated, and "
-                "our team will confirm an available date with you."
+            return self.catalogue.enrollment_reply(
+                "confirmed_awaiting_course_date",
+                first_name=_first_name(draft.full_name),
             )
-        return (
-            f"Thank you, {_first_name(draft.full_name)}. Your enrolment has been "
-            "recorded successfully.\n\n"
-            f"Course: {draft.course}\n"
-            f"Participant: {draft.full_name}\n"
-            f"NRIC/FIN: {mask_nric(draft.nric)}\n"
-            f"Preferred intake: {_display_date(draft.preferred_intake_date)}"
+        return self.catalogue.enrollment_reply(
+            "confirmed_with_course_date",
+            first_name=_first_name(draft.full_name),
+            preferred_intake=_display_date(draft.preferred_intake_date),
         )
 
-    @staticmethod
-    def _already_confirmed_reply(draft):
+    def _already_confirmed_reply(self, draft):
         if draft.status == "awaiting_course_date":
-            return (
-                f"{_first_name(draft.full_name)}, your enrolment details are saved. "
-                "Our team will confirm an available course date with you."
+            return self.catalogue.enrollment_reply(
+                "already_awaiting_course_date",
+                first_name=_first_name(draft.full_name),
             )
-        return (
-            f"{_first_name(draft.full_name)}, your enrolment is already confirmed. "
-            "No further action is needed."
+        return self.catalogue.enrollment_reply(
+            "already_confirmed", first_name=_first_name(draft.full_name)
         )
 
     def _apply_payment_defaults(self, draft, supplied_fields):
@@ -363,7 +396,11 @@ class EnrollmentService:
             if "skillsfuture_amount" not in supplied_fields:
                 updates["skillsfuture_amount"] = None
             if "paynow_amount" not in supplied_fields:
-                updates["paynow_amount"] = None
+                updates["paynow_amount"] = (
+                    Decimal("0.00")
+                    if draft.skillsfuture_amount == self.catalogue.course_fee
+                    else None
+                )
 
         if updates:
             self.repository.update_draft(draft, updates)
@@ -404,49 +441,32 @@ class EnrollmentService:
                 )
         return None
 
-    def _paynow_question(self, draft):
-        if draft and draft.payment_method == "utap":
-            return (
-                "UTAP is claimed after course completion, so the "
-                f"{self.catalogue.course_fee_display} fee must be "
-                "paid upfront. How much will you pay by PayNow?"
-            )
-        return (
-            "How much will you pay by PayNow? Your SkillsFuture and PayNow amounts "
-            f"should total {self.catalogue.course_fee_display}."
-        )
-
-    @staticmethod
-    def _correction_acknowledgement(draft, corrected_fields):
+    def _correction_acknowledgement(self, draft, corrected_fields):
         name = _first_name(draft.full_name)
         if len(corrected_fields) == 1:
             field = next(iter(corrected_fields))
-            label = {
-                "course": "course",
-                "full_name": "name",
-                "nric": "NRIC/FIN",
-                "date_of_birth": "date of birth",
-                "email": "email address",
-                "preferred_intake_date": "selected intake",
-                "mobile_number": "mobile number",
-                "payment_method": "payment option",
-                "skillsfuture_amount": "SkillsFuture amount",
-                "paynow_amount": "PayNow amount",
-            }[field]
-            opening = f"Thanks, {name}." if name else "Thanks."
-            return f"{opening} I’ve updated your {label}."
-        opening = f"Thanks, {name}." if name else "Thanks."
-        return f"{opening} I’ve updated those details."
+            label = self.catalogue.enrollment_field_label(field).casefold()
+            return self.catalogue.enrollment_reply(
+                "correction_single",
+                first_name=name or "there",
+                field_label=label,
+            )
+        return self.catalogue.enrollment_reply(
+            "correction_multiple", first_name=name or "there"
+        )
 
 
 def _display_date(value):
     if value is None:
-        return "Awaiting confirmation from our team"
+        return "Awaiting staff confirmation"
     return f"{value.day} {value.strftime('%B %Y')}"
 
 
 def _display_amount(value):
-    return f"S${Decimal(value):.2f}"
+    amount = Decimal(value)
+    if amount == amount.to_integral():
+        return f"S${amount:.0f}"
+    return f"S${amount:.2f}"
 
 
 def _amount_value(value):
@@ -456,9 +476,21 @@ def _amount_value(value):
 def _payment_method_label(value):
     return {
         "paynow": "PayNow",
-        "skillsfuture_paynow": "Basic-tier SkillsFuture Credits with PayNow remainder",
+        "skillsfuture_paynow": "SkillsFuture Credits and PayNow",
         "utap": "UTAP reimbursement after upfront payment",
     }.get(value, value)
+
+
+def _is_awaiting_intake_confirmation(value):
+    normalized = " ".join(str(value).casefold().split())
+    return normalized in {
+        "awaiting confirmation",
+        "awaiting staff confirmation",
+        "next available intake",
+        "next available",
+        "to be confirmed",
+        "tbc",
+    }
 
 
 def _first_name(full_name):
