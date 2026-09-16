@@ -18,6 +18,7 @@ from backend.app import create_app
 class FakeAIService:
     def __init__(self):
         self.classify_calls = []
+        self.faq_calls = []
         self.enrollment_calls = []
 
     def classify(self, message, context, active_intent, draft_status):
@@ -32,37 +33,94 @@ class FakeAIService:
         lowered = message.casefold()
         faq_terms = (
             "fee",
+            "fees",
             "cost",
+            "much",
             "duration",
             "how long",
             "location",
             "where",
+            "whr",
+            "venue",
+            "held",
             "funding",
             "course",
+            "corse",
+            "class",
+            "classes",
             "certificate",
             "capacity",
             "experience",
             "time",
             "date",
             "skillsfuture",
+            "skillfuture",
+            "skilsfuture",
             "mid-career",
             "mid career",
             "paynow",
+            "pay now",
+            "payment",
+            "paymnt",
+            "screenshot",
+            "proof of payment",
+            "invoice",
+            "claim steps",
             "utap",
             "qualification",
+            "qualific",
             "qualified",
             "job",
+            "position",
             "website",
         )
-        enrollment_terms = ("enrol", "enroll", "enrl", "register", "sign up", "apply")
+        enrollment_terms = (
+            "enrol",
+            "enroll",
+            "enrl",
+            "register",
+            "regster",
+            "sign up",
+            "sign upp",
+            "apply",
+        )
         is_question = "?" in message or lowered.startswith(
-            ("what", "when", "where", "can", "could", "how", "is", "do", "does", "tell")
+            (
+                "what",
+                "wat",
+                "when",
+                "where",
+                "whr",
+                "can",
+                "could",
+                "how",
+                "hw",
+                "is",
+                "do",
+                "does",
+                "tell",
+            )
         )
         asks_how_to_enroll = is_question and any(
             term in lowered for term in enrollment_terms
         )
+        direct_enrollment = any(
+            term in lowered
+            for term in (
+                "i want to enrol",
+                "i want to enroll",
+                "i wana enrl",
+                "i would like to register",
+                "please register me",
+                "register me",
+                "sign me up",
+                "sign me upp",
+                "ready to enrol",
+                "ready to enroll",
+            )
+        )
         starts_enrollment = any(term in lowered for term in enrollment_terms)
-        if starts_enrollment and not asks_how_to_enroll:
+        if direct_enrollment or (starts_enrollment and not asks_how_to_enroll):
             intent = "enrollment"
         elif asks_how_to_enroll or (
             any(term in lowered for term in faq_terms)
@@ -79,60 +137,86 @@ class FakeAIService:
             short_reason="Deterministic test classification.",
         )
 
-    def answer_faq(self, message, context, catalogue_context):
+    def answer_faq(
+        self, message, context, catalogue_context, customer_first_name=None
+    ):
+        self.faq_calls.append(
+            {
+                "message": message,
+                "context": context,
+                "customer_first_name": customer_first_name,
+            }
+        )
         catalogue = json.loads(catalogue_context)
         course = catalogue["course"]
         lowered = message.casefold()
+        faq_answers = {item["topic"]: item["answer"] for item in catalogue["faqs"]}
+        topics = []
+        asks_fee = any(term in lowered for term in ("fee", "fees", "cost", "much", "expensive"))
+        asks_duration = any(term in lowered for term in ("duration", "how long", "time"))
         if "mid-career" in lowered or "mid career" in lowered:
-            answer = "Mid-Career SkillsFuture Credits cannot be used for this course."
-        elif "skillsfuture" in lowered or "funding" in lowered:
-            answer = (
-                "You may use basic-tier SkillsFuture Credits for this course. Please "
-                f"check your balance and submit your claim at {course['skillsfuture']['claim_page']}."
-            )
+            topics = ["Mid-Career SkillsFuture"]
+            answer = faq_answers["Mid-Career SkillsFuture"]
+        elif any(term in lowered for term in ("skillsfuture", "skillfuture", "skilsfuture", "funding")):
+            topics = ["SkillsFuture"]
+            answer = course["skillsfuture"]["customer_reply"]
+            answer += f" You can check your balance at {course['skillsfuture']['claim_page']}."
         elif "utap" in lowered or "union" in lowered:
+            topics = ["UTAP"]
+            answer = course["utap"]["customer_reply"]
+        elif "paynow" in lowered or "pay now" in lowered or "uen" in lowered:
+            topics = ["PayNow"]
+            answer = course["paynow"]["customer_reply"]
+        elif any(term in lowered for term in ("payment option", "payment mode", "paymnt")):
+            topics = ["payment options"]
+            answer = faq_answers["payment options"]
+        elif asks_fee and asks_duration:
+            topics = ["course fee and value", "duration and timing"]
             answer = (
-                "Eligible NTUC Union members may claim 50% of the unfunded course fee, "
-                "subject to the annual cap. You must pay upfront, attend both days, and "
-                "claim within six months after completion. UTAP cannot be combined with "
-                "SkillsFuture Credits."
+                f"The full course fee is {course['fee']['display']}. Training runs "
+                f"over {course['duration']}, from {course['training_time']}."
             )
-        elif "paynow" in lowered:
-            answer = f"PayNow is accepted using UEN {course['paynow']['uen']}. 💳"
-        elif "fee" in lowered or "cost" in lowered or "expensive" in lowered:
-            answer = (
-                f"The full course fee is {course['fee']['display']}. 💳 Would you like "
-                "to know about the payment options?"
-            )
-        elif "duration" in lowered or "how long" in lowered or "time" in lowered:
-            answer = (
-                f"Training runs over {course['duration']}, from "
-                f"{course['training_time']}. 🦷"
-            )
+        elif asks_fee:
+            topics = ["course fee and value"]
+            answer = faq_answers["course fee and value"]
+        elif asks_duration:
+            topics = ["duration and timing"]
+            answer = faq_answers["duration and timing"]
         elif "location" in lowered or "where" in lowered or "venue" in lowered:
-            answer = f"The course venue is {course['venue']}."
-        elif "date" in lowered or "intake" in lowered or "when" in lowered:
+            topics = ["venue"]
+            answer = course["venue"]["customer_reply"]
+        elif any(
+            term in lowered
+            for term in ("date", "intake", "when", "next class", "next course")
+        ):
+            topics = ["course dates"]
             answer = course["no_intakes_message"]
         elif "qualification" in lowered or "qualified" in lowered or "requirement" in lowered:
+            topics = ["minimum qualification"]
             answer = course["minimum_qualification"]
         elif "job" in lowered or "position" in lowered or "work" in lowered:
-            answer = course["job_opportunities"]
+            topics = ["job opportunities"]
+            answer = course["employment"]["customer_reply"]
         elif "website" in lowered or "more details" in lowered:
+            topics = ["course website"]
             answer = f"You can find more course details at {course['website']}."
+        elif "invoice" in lowered or "claim steps" in lowered:
+            topics = ["invoice and claim guidance"]
+            answer = faq_answers["invoice and claim guidance"]
+        elif "screenshot" in lowered or "proof of payment" in lowered:
+            topics = ["payment screenshot channel"]
+            answer = faq_answers["payment screenshot channel"]
         elif "enrol" in lowered or "enroll" in lowered or "register" in lowered:
-            answer = (
-                "I can guide you through enrollment one detail at a time, then show "
-                "you a summary to confirm."
-            )
+            topics = ["enrolment process"]
+            answer = course["enrollment"]["customer_reply"]
         elif "parking" in lowered:
-            answer = "I’m sorry, I don’t have parking information at the moment."
+            answer = catalogue["reply_style"]["staff_confirmation_message"]
         else:
-            answer = (
-                f"Our {course['name']} is {course['overview'][0].lower()}"
-                f"{course['overview'][1:]} 🦷 Would you like to know about the course "
-                "fee, dates, or enrollment process?"
-            )
-        return FAQAnswer(answer=answer)
+            topics = ["course description"]
+            answer = faq_answers["course description"]
+        if customer_first_name:
+            answer = f"Hi {customer_first_name}. {answer}"
+        return FAQAnswer(answer=answer, matched_topics=topics)
 
     def extract_enrollment(self, message, context, draft_state):
         self.enrollment_calls.append(
@@ -204,6 +288,13 @@ class FakeAIService:
             message,
             re.IGNORECASE,
         )
+        if not skillsfuture_match:
+            skillsfuture_match = re.search(
+                r"(?:s\$|\$)?\s*(\d+(?:\.\d{1,2})?)\s*"
+                r"(?:of\s+)?(?:skillsfuture|sfc)",
+                message,
+                re.IGNORECASE,
+            )
         if skillsfuture_match:
             fields["skillsfuture_amount"] = skillsfuture_match.group(1)
 
@@ -212,6 +303,13 @@ class FakeAIService:
             message,
             re.IGNORECASE,
         )
+        if not paynow_match:
+            paynow_match = re.search(
+                r"(?:remaining\s+)?(?:s\$|\$)?\s*(\d+(?:\.\d{1,2})?)\s*"
+                r"(?:by|via|through)?\s*(?:paynow|pay now)",
+                message,
+                re.IGNORECASE,
+            )
         if paynow_match:
             fields["paynow_amount"] = paynow_match.group(1)
 

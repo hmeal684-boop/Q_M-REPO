@@ -10,6 +10,15 @@ from email_validator import EmailNotValidError, validate_email
 
 NRIC_FORMAT = re.compile(r"^[STFGM]\d{7}[A-Z]$", re.IGNORECASE)
 MOBILE_FORMAT = re.compile(r"^[89]\d{7}$")
+IDENTITY_WEIGHTS = (2, 7, 6, 5, 4, 3, 2)
+IDENTITY_OFFSETS = {"S": 0, "T": 4, "F": 0, "G": 4, "M": 3}
+IDENTITY_CHECKSUMS = {
+    "S": "JZIHGFEDCBA",
+    "T": "JZIHGFEDCBA",
+    "F": "XWUTRQPNMLK",
+    "G": "XWUTRQPNMLK",
+    "M": "XWUTRQPNJLK",
+}
 
 
 FIELD_LABELS = {
@@ -64,6 +73,11 @@ def validate_field(field, value, catalogue):
             return None, (
                 "Please enter a valid Singapore NRIC/FIN format, for example "
                 "one letter, seven digits and a final letter."
+            )
+        if not has_valid_identity_checksum(normalized):
+            return None, (
+                "Please enter a valid Singapore NRIC/FIN, including the correct "
+                "final checksum letter."
             )
         return normalized, None
 
@@ -157,3 +171,16 @@ def validate_field(field, value, catalogue):
         return normalized, None
 
     raise ValueError(f"Unsupported enrollment field: {field}")
+
+
+def has_valid_identity_checksum(value):
+    normalized = str(value).replace(" ", "").upper()
+    if not NRIC_FORMAT.fullmatch(normalized):
+        return False
+    weighted_sum = sum(
+        int(digit) * weight
+        for digit, weight in zip(normalized[1:8], IDENTITY_WEIGHTS)
+    )
+    weighted_sum += IDENTITY_OFFSETS[normalized[0]]
+    expected = IDENTITY_CHECKSUMS[normalized[0]][weighted_sum % 11]
+    return normalized[-1] == expected
