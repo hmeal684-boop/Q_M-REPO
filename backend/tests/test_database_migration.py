@@ -42,8 +42,8 @@ def test_existing_database_data_survives_enrollment_field_migration(tmp_path, fa
             );
             INSERT INTO enrollment_drafts VALUES (
                 'existing-draft', 'existing-conversation',
-                '2-Day Basic Certificate in Dental Assisting', 'Existing Test Record',
-                'S0000001A', '1990-01-02', 'existing.test@example.com', NULL,
+                '2-Day Basic Certificate in Dental Assisting', 'Test Student',
+                'S1234567D', '2000-05-15', 'test.student@example.com', NULL,
                 'collecting', '2026-09-01 00:00:00.000000',
                 '2026-09-01 00:00:00.000000', NULL
             );
@@ -70,8 +70,8 @@ def test_existing_database_data_survives_enrollment_field_migration(tmp_path, fa
         } <= columns
         assert db.session.query(Conversation).count() == 1
         draft = db.session.get(EnrollmentDraft, "existing-draft")
-        assert draft.full_name == "Existing Test Record"
-        assert draft.email == "existing.test@example.com"
+        assert draft.full_name == "Test Student"
+        assert draft.email == "test.student@example.com"
         assert draft.mobile_number is None
         assert draft.payment_method is None
         assert draft.skillsfuture_amount is None

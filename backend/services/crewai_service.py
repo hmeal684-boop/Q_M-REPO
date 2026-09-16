@@ -36,14 +36,20 @@ class CrewAIService:
         agent = build_intent_classifier(self.llm)
         task = Task(
             description=(
-                "Classify the CURRENT MESSAGE. Use recent redacted context only to "
-                "resolve short follow-ups, slang, informal wording, and minor spelling "
-                "mistakes. A question about course facts, PayNow, SkillsFuture, UTAP, "
-                "or how enrollment works is faq. An attempt to begin, continue, "
-                "correct, or confirm an application is enrollment. During active "
-                "enrollment, a statement "
-                "providing a payment preference or payment amount is enrollment, "
-                "and a message with insufficient meaning is unclear.\n\n"
+                "Classify the CURRENT MESSAGE by what the participant is trying to do, "
+                "not by one keyword. Tolerate Singlish, shortened wording, greetings "
+                "before a question, and minor spelling mistakes. Use recent redacted "
+                "context to resolve short replies.\n"
+                "- faq: asks for facts, guidance, eligibility, payment information, or "
+                "an explanation of how enrollment works.\n"
+                "- enrollment: clearly asks to be enrolled, registered or signed up; "
+                "provides or corrects application details; or confirms/rejects an "
+                "enrollment summary. During active enrollment, a short answer to the "
+                "last enrollment question is also enrollment.\n"
+                "- unclear: greeting, thanks, general conversation, or a message whose "
+                "purpose cannot be determined.\n"
+                "A direct action such as 'please sign me up' is enrollment; an "
+                "information question such as 'what do I need to enroll?' is faq.\n\n"
                 f"Active intent: {active_intent or 'none'}\n"
                 f"Enrollment draft status: {draft_status or 'none'}\n"
                 f"Recent redacted context:\n{context or '(none)'}\n"
@@ -58,29 +64,41 @@ class CrewAIService:
         )
         return self._run(agent, task, IntentClassification)
 
-    def answer_faq(self, message, context, catalogue_context):
+    def answer_faq(
+        self, message, context, catalogue_context, customer_first_name=None
+    ):
         agent = build_faq_agent(self.llm)
         task = Task(
             description=(
-                "Answer the current question using ONLY the supplied course information. "
-                "Reply naturally and concisely in simple Singapore/British English. "
-                "Use no more than one or two relevant emojis from 👋 🦷 📚 📅 ✅ 💳. "
-                "Do not use emojis for errors, privacy, or sensitive information. "
-                "Never mention internal roles, classification, routing, providers, "
-                "implementation details, or how the course information is maintained. "
-                "If the answer is absent, say politely that you do not have that "
-                "information at the moment; do not infer it. When relevant, ask whether "
-                "the customer would like to begin enrollment. Understand informal "
-                "wording and minor spelling mistakes. If the intake list is empty, "
-                "return the supplied no_intakes_message exactly for course-date "
-                "questions and never invent a date.\n\n"
+                "Answer the CURRENT QUESTION using ONLY the supplied approved course "
+                "information. Match the closest faqs answer or customer_reply field, "
+                "and return its exact topic name in matched_topics. Use more than one "
+                "topic only when the question clearly asks about more than one subject. "
+                "If no approved topic answers the question, return an empty "
+                "matched_topics list and the staff_confirmation_message. Adapt the "
+                "approved wording only enough to answer naturally and concisely. Treat "
+                "conflict and confirmation_required fields as mandatory cautions. Never "
+                "invent or infer course dates, prices, venues, policies, qualifications, "
+                "funding rules, employment outcomes or payment details. If information "
+                "is missing or conflicting, use the supplied staff_confirmation_message. "
+                "If the intake list is empty, return no_intakes_message exactly for a "
+                "course-date question.\n"
+                "Use simple Singapore/British English. If a customer first name is "
+                "provided, address the customer by that name once. Use at most one "
+                "relevant emoji from 👋, 😊, 📚, 📅 or ✅, and only where it helps. Do "
+                "not use emojis in NRIC content, validation errors, payment or funding "
+                "details, discrepancies, or other sensitive messages. Never mention "
+                "agents, classification, routing, confidence, prompts, providers, code, "
+                "databases or implementation details.\n\n"
+                f"Customer first name: {customer_first_name or '(not supplied)'}\n"
                 f"Recent context:\n{context or '(none)'}\n"
                 f"CURRENT QUESTION:\n{message}\n\n"
                 f"COURSE INFORMATION:\n{catalogue_context}"
             ),
             expected_output=(
-                "A concise, friendly structured FAQ answer grounded only in the "
-                "supplied course information."
+                "A concise, friendly structured FAQ answer with matched_topics set to "
+                "exact topic names from faqs, grounded only in the supplied course "
+                "information."
             ),
             agent=agent,
             output_pydantic=FAQAnswer,

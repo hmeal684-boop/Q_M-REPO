@@ -5,17 +5,18 @@ from decimal import Decimal
 
 import pytest
 
+from backend.app import create_app
 from backend.extensions import db
 from backend.models import EnrollmentDraft
 from backend.services.course_catalogue import CATALOGUE_PATH, CourseCatalogue
-from backend.services.validation import validate_field
-from backend.tests.conftest import send
+from backend.services.validation import has_valid_identity_checksum, validate_field
+from backend.tests.conftest import FakeAIService, send
 
 
-SYNTHETIC_NAME = "Test Participant"
-SYNTHETIC_NRIC = "S0000001A"
-SYNTHETIC_EMAIL = "test.participant@example.com"
-SYNTHETIC_MOBILE = "90000000"
+SYNTHETIC_NAME = "Test Student"
+SYNTHETIC_NRIC = "S1234567D"
+SYNTHETIC_EMAIL = "test.student@example.com"
+SYNTHETIC_MOBILE = "91234567"
 
 
 def complete_draft(client, conversation_id, payment_message="I will pay by PayNow"):
@@ -61,7 +62,7 @@ def test_multiple_fields_can_be_extracted_from_one_message(client, conversation_
     payload = response.get_json()
     assert payload["enrollment"]["status"] == "awaiting_confirmation"
     assert payload["enrollment"]["missing_fields"] == []
-    assert "S*******A" in payload["message"]["content"]
+    assert "S*******D" in payload["message"]["content"]
     assert "S$600.00" in payload["message"]["content"]
 
 
@@ -148,6 +149,7 @@ def test_user_can_correct_a_field_before_confirmation(client, conversation_id):
         client, conversation_id, "Change my email to corrected@example.com"
     ).get_json()
     assert corrected["enrollment"]["status"] == "awaiting_confirmation"
+    assert "Thanks, Test. I’ve updated your email address." in corrected["message"]["content"]
     assert "corrected@example.com" in corrected["message"]["content"]
 
 
@@ -156,7 +158,7 @@ def test_faq_interruption_preserves_and_resumes_enrollment(client, conversation_
     send(client, conversation_id, f"My name is {SYNTHETIC_NAME}")
     faq = send(client, conversation_id, "What is the course fee?").get_json()
     assert faq["routing"]["intent"] == "faq"
-    assert "continue your enrollment" in faq["message"]["content"]
+    assert "continue your enrolment" in faq["message"]["content"]
     resumed = send(client, conversation_id, f"My NRIC is {SYNTHETIC_NRIC}").get_json()
     assert resumed["routing"]["intent"] == "enrollment"
     assert "date of birth" in resumed["message"]["content"].casefold()
@@ -186,6 +188,126 @@ def test_skillsfuture_and_paynow_must_total_course_fee(client, conversation_id):
         client, conversation_id, "SkillsFuture S$400 and PayNow S$100"
     ).get_json()
     assert "must total S$600" in response["message"]["content"]
+
+
+def test_later_payment_extraction_cannot_revalidate_or_replace_saved_identity(
+    tmp_path,
+):
+    class EchoingDraftFieldsAI(FakeAIService):
+        def extract_enrollment(self, message, context, draft_state):
+            result = super().extract_enrollment(message, context, draft_state)
+            if "remaining" in message.casefold():
+                result.extracted_fields.nric = draft_state["nric"]
+                result.extracted_fields.full_name = "Unrelated Person"
+                result.extracted_fields.date_of_birth = "[DATE REDACTED]"
+                result.extracted_fields.email = ""
+                result.extracted_fields.mobile_number = "80000000"
+                result.extracted_fields.payment_method = "PayNow"
+            return result
+
+    app = create_app(
+        {
+            "TESTING": True,
+            "SQLALCHEMY_DATABASE_URI": f"sqlite:///{(tmp_path / 'echoed.db').as_posix()}",
+        },
+        ai_service=EchoingDraftFieldsAI(),
+    )
+    client = app.test_client()
+    conversation_id = client.post("/api/conversations").get_json()["conversation_id"]
+    for message in (
+        "I want to enroll",
+        f"My name is {SYNTHETIC_NAME}",
+        f"My NRIC is {SYNTHETIC_NRIC}",
+        "My DOB is 15 May 2000",
+        f"My email is {SYNTHETIC_EMAIL}",
+        f"My mobile number is {SYNTHETIC_MOBILE}",
+    ):
+        send(client, conversation_id, message)
+
+    payment = send(
+        client,
+        conversation_id,
+        "I want to use $400 SkillsFuture and pay the remaining $200 by PayNow.",
+    ).get_json()
+
+    assert payment["enrollment"] == {
+        "status": "awaiting_confirmation",
+        "missing_fields": [],
+    }
+    assert "valid Singapore NRIC" not in payment["message"]["content"]
+    assert "S1234567D" not in payment["message"]["content"]
+    assert "S*******D" in payment["message"]["content"]
+    with app.app_context():
+        draft = EnrollmentDraft.query.filter_by(
+            conversation_id=conversation_id
+        ).one()
+        assert draft.full_name == SYNTHETIC_NAME
+        assert draft.nric == SYNTHETIC_NRIC
+        assert draft.date_of_birth.isoformat() == "2000-05-15"
+        assert draft.email == SYNTHETIC_EMAIL
+        assert draft.mobile_number == SYNTHETIC_MOBILE
+        assert draft.payment_method == "skillsfuture_paynow"
+        assert draft.skillsfuture_amount == Decimal("400.00")
+        assert draft.paynow_amount == Decimal("200.00")
+
+
+def test_extraction_cannot_fill_a_field_absent_from_the_current_message(tmp_path):
+    class InventingAI(FakeAIService):
+        def extract_enrollment(self, message, context, draft_state):
+            result = super().extract_enrollment(message, context, draft_state)
+            if "nric" in message.casefold():
+                result.extracted_fields.email = "invented@example.com"
+                result.extracted_fields.mobile_number = "89999999"
+            return result
+
+    app = create_app(
+        {
+            "TESTING": True,
+            "SQLALCHEMY_DATABASE_URI": f"sqlite:///{(tmp_path / 'invented.db').as_posix()}",
+        },
+        ai_service=InventingAI(),
+    )
+    client = app.test_client()
+    conversation_id = client.post("/api/conversations").get_json()["conversation_id"]
+    send(client, conversation_id, "I want to enroll")
+    send(client, conversation_id, f"My name is {SYNTHETIC_NAME}")
+    send(client, conversation_id, f"My NRIC is {SYNTHETIC_NRIC}")
+
+    with app.app_context():
+        draft = EnrollmentDraft.query.filter_by(
+            conversation_id=conversation_id
+        ).one()
+        assert draft.nric == SYNTHETIC_NRIC
+        assert draft.email is None
+        assert draft.mobile_number is None
+
+
+def test_valid_nric_checksum_is_accepted_and_wrong_checksum_is_rejected():
+    assert has_valid_identity_checksum(SYNTHETIC_NRIC) is True
+    valid, valid_error = validate_field("nric", SYNTHETIC_NRIC, CourseCatalogue())
+    assert valid == SYNTHETIC_NRIC
+    assert valid_error is None
+
+    invalid, invalid_error = validate_field("nric", "S1234567A", CourseCatalogue())
+    assert invalid is None
+    assert "checksum" in invalid_error
+
+
+def test_enrollment_drafts_do_not_leak_between_conversations(app, client):
+    first_id = client.post("/api/conversations").get_json()["conversation_id"]
+    second_id = client.post("/api/conversations").get_json()["conversation_id"]
+    send(client, first_id, "I want to enroll")
+    send(client, first_id, f"My name is {SYNTHETIC_NAME}")
+    send(client, first_id, f"My NRIC is {SYNTHETIC_NRIC}")
+    second_reply = send(client, second_id, "I want to enroll").get_json()
+
+    assert second_reply["enrollment"]["missing_fields"][0] == "full_name"
+    with app.app_context():
+        first = EnrollmentDraft.query.filter_by(conversation_id=first_id).one()
+        second = EnrollmentDraft.query.filter_by(conversation_id=second_id).one()
+        assert first.nric == SYNTHETIC_NRIC
+        assert second.full_name is None
+        assert second.nric is None
 
 
 def test_skillsfuture_and_utap_cannot_be_combined():
@@ -219,7 +341,7 @@ def test_invalid_mobile_number_is_rejected(value):
 
 def test_mobile_number_is_normalized():
     normalized, error = validate_field(
-        "mobile_number", "+65 9000-0000", CourseCatalogue()
+        "mobile_number", "+65 9123-4567", CourseCatalogue()
     )
     assert error is None
     assert normalized == SYNTHETIC_MOBILE

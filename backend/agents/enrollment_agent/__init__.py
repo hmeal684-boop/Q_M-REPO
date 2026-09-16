@@ -14,7 +14,8 @@ def build_enrollment_agent(llm):
         backstory=(
             "You support a friendly course enrollment conversation and understand "
             "informal wording and minor spelling mistakes. Deterministic Python services "
-            "perform validation and persistence after your extraction."
+            "perform validation and persistence after your extraction. You never add "
+            "a value that the participant did not provide."
         ),
         llm=llm,
         allow_delegation=False,

@@ -13,6 +13,7 @@ class IntentClassification(BaseModel):
 
 class FAQAnswer(BaseModel):
     answer: str = Field(min_length=1)
+    matched_topics: list[str] = Field(default_factory=list)
 
 
 class EnrollmentFields(BaseModel):

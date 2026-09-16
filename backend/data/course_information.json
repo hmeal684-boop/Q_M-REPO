@@ -1,15 +1,44 @@
 {
+  "content_status": {
+    "last_reviewed": "2026-09-15",
+    "source_priority": [
+      "company reply information",
+      "latest explicit company workflow or email instruction",
+      "Clifton's requirements"
+    ],
+    "conflicts": {
+      "venue": "The course reply template says our HQ at Clementi Loop, while workflow examples show the Q&M Dental Centre auditorium at 180 Kitchener Road and an email signature lists the head office at IMM Building. The exact venue must be confirmed for each intake.",
+      "intake_dates": "Dates shown in the supplied reply and workflow examples are historical. Only dates in the current intakes list may be offered.",
+      "lead_follow_up_timing": "The presentation shows 30 minutes, one day and two days; the later company email instructs three attempts at two-day intervals. This is outside the current chatbot reply flow."
+    }
+  },
+  "reply_style": {
+    "tone": "Warm, helpful and natural",
+    "language": "Concise Singapore/British English",
+    "emoji_guidance": "Use at most one relevant emoji where it helps. Do not use emojis for NRIC, validation errors, payment details, funding eligibility, discrepancies or other sensitive messages.",
+    "staff_confirmation_message": "I’m sorry, I don’t have confirmed information about that at the moment. Our team will need to confirm it for you."
+  },
   "course": {
     "name": "2-Day Basic Certificate in Dental Assisting",
-    "overview": "A practical two-day course covering dental instruments and materials, infection control, and how to anticipate a dentist's needs during procedures.",
+    "overview": "This beginner-friendly, practical course introduces essential dental-assisting skills, including recognising dental instruments and materials, infection control, and anticipating a dentist’s needs during procedures.",
+    "content_topics": [
+      "recognising dental instruments and materials",
+      "infection control",
+      "anticipating a dentist’s needs during procedures"
+    ],
     "fee": {
       "amount": 600,
       "currency": "SGD",
-      "display": "S$600 nett"
+      "display": "S$600 nett",
+      "value_guidance": "The fee includes the course materials, expert instruction, and access to specialised equipment and facilities."
     },
-    "duration": "two consecutive days",
+    "duration": "two consecutive training days",
     "training_time": "9:30am to 5:30pm on each day",
-    "venue": "Q&M HQ, Clementi Loop",
+    "venue": {
+      "reply_template_wording": "our HQ at Clementi Loop",
+      "confirmation_required": true,
+      "customer_reply": "The course reply template lists the venue as our HQ at Clementi Loop. As another supplied workflow example shows a different venue, our team will confirm the exact venue for your intake."
+    },
     "website": "https://qandm.edu.sg/Courses/Dental-Assistant/4/Basic-Certificate-In-Dental-Assisting",
     "intakes": [],
     "no_intakes_message": "Our upcoming course dates are being updated. Please leave your contact details, and our team will confirm the available dates with you.",
@@ -17,27 +46,49 @@
       "basic_tier_accepted": true,
       "mid_career_tier_accepted": false,
       "claim_page": "https://sfc.myskillsfuture.gov.sg/claim",
-      "guidance": "Participants may use basic-tier SkillsFuture Credits and must check their own available balance and submit their own claim. Mid-Career SkillsFuture Credits cannot be used for this course."
+      "customer_reply": "You may use basic-tier SkillsFuture Credits for this course. Mid-Career SkillsFuture Credits cannot be used. Please check your basic-tier balance on the SkillsFuture portal and tell us how much you intend to use. You will need to submit your own claim.",
+      "invoice_guidance": "After receiving the required enrolment and payment details, the team will prepare an invoice and email the participant the SkillsFuture claim steps."
     },
     "paynow": {
       "accepted": true,
-      "uen": "201841969G"
+      "uen": "201841969G",
+      "customer_reply": "PayNow is accepted using UEN 201841969G. If you are also using basic-tier SkillsFuture Credits, please state the SkillsFuture amount and the remaining PayNow amount."
     },
     "utap": {
       "available_to": "eligible NTUC Union members",
-      "support": "50% of the unfunded course fee, up to S$250 per year or S$500 per year for members aged 40 and above",
+      "support": "50% of the unfunded course fee, up to S$250 per year or S$500 per year for NTUC members aged 40 and above",
       "rules": [
+        "The participant must have a valid NTUC Union membership.",
         "The participant must pay the course fee upfront.",
         "The participant must attend both training days.",
         "The claim must be submitted within six months after course completion.",
         "Proof of payment and proof of completion are required.",
         "UTAP and SkillsFuture Credits cannot be combined for the same course fee."
       ],
+      "claim_steps": [
+        "Check that the NTUC Union membership is valid.",
+        "Enrol, pay the course fee upfront, and attend both training days.",
+        "After completing the course, log in to the NTUC U Portal and submit the UTAP claim.",
+        "Upload proof of payment and proof of completion.",
+        "Submit the claim within six months after course completion."
+      ],
       "membership_help": "https://ntuc.co/chat",
-      "portal": "https://www.ntuc.org.sg"
+      "portal": "https://www.ntuc.org.sg",
+      "customer_reply": "Eligible NTUC Union members may claim 50% of the unfunded course fee, capped at S$250 per year or S$500 per year for members aged 40 and above. You must pay upfront, attend both training days, and submit your claim through the NTUC U Portal within six months after completion with proof of payment and completion. UTAP cannot be combined with SkillsFuture Credits."
     },
-    "minimum_qualification": "GCE N Levels are preferred. Applicants without GCE N Levels may be considered if they have basic English reading and writing skills because the assessment is conducted in English.",
-    "job_opportunities": "Suitable candidates may be considered for job opportunities after the course, subject to Q&M's normal selection and interview process. A job is not guaranteed.",
+    "minimum_qualification": "GCE N Levels are preferred. Applicants without GCE N Levels may still be considered if they have basic English reading and writing skills, as the assessment is conducted in English.",
+    "employment": {
+      "opportunity_timing": "Suitable candidates may be considered for job opportunities on the last day of the class.",
+      "selection_factors": [
+        "work location",
+        "schedule",
+        "skills and experience",
+        "cultural fit",
+        "interview performance"
+      ],
+      "guaranteed": false,
+      "customer_reply": "Q&M may consider suitable candidates for job opportunities on the last day of the class. Selection depends on factors such as work location, schedule, skills and experience, cultural fit, and interview performance, so employment is not guaranteed."
+    },
     "enrollment": {
       "required_information": [
         "selected intake date when available",
@@ -54,33 +105,37 @@
         "PayNow",
         "basic-tier SkillsFuture Credits with any remainder through PayNow",
         "UTAP reimbursement after upfront payment and course completion"
-      ]
+      ],
+      "payment_question": "Which payment option would you like to use: PayNow, basic-tier SkillsFuture Credits with any PayNow remainder, or UTAP reimbursement?",
+      "customer_reply": "To enrol, please provide your selected intake when available, full name as shown on your NRIC, NRIC, date of birth, email address, mobile number, payment method, and the SkillsFuture and PayNow amounts where applicable. We will collect the details one at a time and show you a summary to confirm.",
+      "invoice_guidance": "After the required details are received, the team will prepare an invoice and email the participant the relevant payment or SkillsFuture claim instructions.",
+      "payment_evidence": "Payment screenshots may be sent through email or WhatsApp. Email is the preferred channel."
     }
   },
   "faqs": [
     {
-      "topic": "course overview",
-      "answer": "The 2-Day Basic Certificate in Dental Assisting is a practical course covering dental instruments and materials, infection control, and anticipating a dentist's needs during procedures."
+      "topic": "course description",
+      "answer": "The 2-Day Basic Certificate in Dental Assisting is a beginner-friendly, practical course covering dental instruments and materials, infection control, and how to anticipate a dentist’s needs during procedures. 📚"
     },
     {
-      "topic": "course fee",
-      "answer": "The full course fee is S$600 nett."
+      "topic": "course fee and value",
+      "answer": "The full course fee is S$600 nett. It includes the course materials, expert instruction, and access to specialised equipment and facilities."
     },
     {
       "topic": "duration and timing",
-      "answer": "Training runs over two consecutive days, from 9:30am to 5:30pm each day."
+      "answer": "Training runs over two consecutive training days, from 9:30am to 5:30pm on each day."
     },
     {
       "topic": "venue",
-      "answer": "The supplied course information lists the venue as Q&M HQ at Clementi Loop."
+      "answer": "The course reply template lists the venue as our HQ at Clementi Loop. As another supplied workflow example shows a different venue, our team will confirm the exact venue for your intake."
     },
     {
       "topic": "course dates",
-      "answer": "Use the configured intake list. If it is empty, use the no_intakes_message exactly and do not invent a date."
+      "answer": "Use the configured intake list. If it is empty, return the no_intakes_message exactly and do not invent a date."
     },
     {
       "topic": "SkillsFuture",
-      "answer": "Basic-tier SkillsFuture Credits are accepted. Participants must check their own balance and submit their own claim."
+      "answer": "You may use basic-tier SkillsFuture Credits for this course. Mid-Career SkillsFuture Credits cannot be used. Please check your basic-tier balance at https://sfc.myskillsfuture.gov.sg/claim, tell us how much you intend to use, and submit your own claim."
     },
     {
       "topic": "Mid-Career SkillsFuture",
@@ -88,23 +143,39 @@
     },
     {
       "topic": "PayNow",
-      "answer": "PayNow is accepted using UEN 201841969G."
+      "answer": "PayNow is accepted using UEN 201841969G. If basic-tier SkillsFuture Credits are also used, the participant must state the SkillsFuture amount and the PayNow remainder."
     },
     {
       "topic": "UTAP",
-      "answer": "Eligible NTUC Union members may claim 50% of the unfunded course fee, subject to the annual cap. They must pay upfront, attend both days, and claim within six months after completion. UTAP cannot be combined with SkillsFuture Credits."
+      "answer": "Eligible NTUC Union members may claim 50% of the unfunded course fee, capped at S$250 per year or S$500 per year for members aged 40 and above. They must pay upfront, attend both training days, and claim through the NTUC U Portal within six months after completion with proof of payment and completion. UTAP cannot be combined with SkillsFuture Credits."
     },
     {
       "topic": "minimum qualification",
-      "answer": "GCE N Levels are preferred. Applicants with basic English reading and writing skills may still be considered because the assessment is conducted in English."
+      "answer": "GCE N Levels are preferred. Applicants without GCE N Levels may still be considered if they have basic English reading and writing skills, as the assessment is conducted in English."
     },
     {
       "topic": "job opportunities",
-      "answer": "Suitable candidates may be considered for job opportunities after the course, subject to the normal selection and interview process. A job is not guaranteed."
+      "answer": "Q&M may consider suitable candidates for job opportunities on the last day of the class. Selection depends on work location, schedule, skills and experience, cultural fit, and interview performance, so employment is not guaranteed."
     },
     {
-      "topic": "enrollment process",
-      "answer": "The enrollment collects the selected intake when available, identity and contact details, payment preference, and the SkillsFuture and PayNow amounts before showing a final confirmation summary."
+      "topic": "payment options",
+      "answer": "The approved options are PayNow, basic-tier SkillsFuture Credits with any PayNow remainder, or UTAP reimbursement after upfront payment and course completion. SkillsFuture Credits and UTAP cannot be combined for the same course fee."
+    },
+    {
+      "topic": "enrolment process",
+      "answer": "To enrol, provide the selected intake when available, your identity and contact details, payment method, and the SkillsFuture and PayNow amounts where applicable. The details are collected one at a time and shown in a final summary for your confirmation."
+    },
+    {
+      "topic": "invoice and claim guidance",
+      "answer": "After the required enrolment and payment details are received, the team will prepare an invoice and email the relevant payment or SkillsFuture claim instructions."
+    },
+    {
+      "topic": "payment screenshot channel",
+      "answer": "Payment screenshots may be sent through email or WhatsApp. Email is the preferred channel."
+    },
+    {
+      "topic": "course website",
+      "answer": "You can find more course details at https://qandm.edu.sg/Courses/Dental-Assistant/4/Basic-Certificate-In-Dental-Assisting."
     }
   ]
 }

@@ -67,7 +67,7 @@ def test_messages_are_persisted_and_reloadable(client, conversation_id):
     assert send(client, conversation_id, "What is the course duration?").status_code == 200
     history = client.get(f"/api/conversations/{conversation_id}/messages").get_json()
     assert [message["role"] for message in history["messages"]] == ["user", "assistant"]
-    assert "two consecutive days" in history["messages"][1]["content"]
+    assert "two consecutive training days" in history["messages"][1]["content"]
 
 
 def test_history_survives_a_new_application_instance(tmp_path, fake_ai):
@@ -104,7 +104,7 @@ def test_enrollment_progress_survives_application_restart(tmp_path, fake_ai):
         "conversation_id"
     ]
     send(first_client, conversation_id, "I want to enroll")
-    send(first_client, conversation_id, "My name is Test Participant")
+    send(first_client, conversation_id, "My name is Test Student")
 
     second_app = create_app(
         {"TESTING": True, "SQLALCHEMY_DATABASE_URI": database_uri},
@@ -119,7 +119,7 @@ def test_enrollment_progress_survives_application_restart(tmp_path, fake_ai):
     assert "nric" in history["enrollment"]["missing_fields"]
 
     resumed = send(
-        second_client, conversation_id, "My NRIC is S0000001A"
+        second_client, conversation_id, "My NRIC is S1234567D"
     ).get_json()
     assert "Test" in resumed["message"]["content"]
     assert "date of birth" in resumed["message"]["content"].casefold()
@@ -127,13 +127,13 @@ def test_enrollment_progress_survives_application_restart(tmp_path, fake_ai):
 
 def test_nric_is_masked_in_history_and_classifier_prompt(client, conversation_id, fake_ai):
     send(client, conversation_id, "I want to enroll")
-    send(client, conversation_id, "My NRIC is S1234567A")
+    send(client, conversation_id, "My NRIC is S1234567D")
     history = client.get(f"/api/conversations/{conversation_id}/messages").get_json()
     rendered = " ".join(message["content"] for message in history["messages"])
-    assert "S1234567A" not in rendered
-    assert "S*******A" in rendered
-    assert "S1234567A" not in fake_ai.classify_calls[-1]["message"]
-    assert "S1234567A" not in fake_ai.classify_calls[-1]["context"]
+    assert "S1234567D" not in rendered
+    assert "S*******D" in rendered
+    assert "S1234567D" not in fake_ai.classify_calls[-1]["message"]
+    assert "S1234567D" not in fake_ai.classify_calls[-1]["context"]
 
 
 def test_context_is_bounded(tmp_path, fake_ai):

@@ -7,13 +7,15 @@ def build_intent_classifier(llm):
     return Agent(
         role="Intent Classification Agent",
         goal=(
-            "Classify each participant message as faq, enrollment, or unclear "
-            "using the supplied conversation state, including informal wording, "
-            "common Singapore usage, and minor spelling mistakes."
+            "Classify each participant message by its purpose as faq, enrollment, "
+            "or unclear. Understand greetings, indirect questions, common Singapore "
+            "usage, shortened words and minor spelling mistakes, while using the "
+            "conversation state to recognise answers that continue an enrollment."
         ),
         backstory=(
             "You are a privacy-conscious router for a customer service assistant. "
-            "You return only the requested structured result and never invent facts."
+            "You distinguish information-seeking questions from a clear request to "
+            "start or continue enrollment, and return only the requested structure."
         ),
         llm=llm,
         allow_delegation=False,
