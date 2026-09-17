@@ -1,4 +1,4 @@
-"""Coverage for the additive enrollment-field migration."""
+"""Coverage for additive enrollment and participant-ownership migrations."""
 
 import sqlite3
 
@@ -68,7 +68,17 @@ def test_existing_database_data_survives_enrollment_field_migration(tmp_path, fa
             "skillsfuture_amount",
             "paynow_amount",
         } <= columns
+        conversation_columns = {
+            column["name"] for column in inspect(db.engine).get_columns("conversations")
+        }
+        assert {"user_id", "pending_followup"} <= conversation_columns
+        message_columns = {
+            column["name"] for column in inspect(db.engine).get_columns("messages")
+        }
+        assert {"image_url", "image_alt", "image_status"} <= message_columns
         assert db.session.query(Conversation).count() == 1
+        legacy_conversation = db.session.get(Conversation, "existing-conversation")
+        assert legacy_conversation.user_id is None
         draft = db.session.get(EnrollmentDraft, "existing-draft")
         assert draft.full_name == "Test Student"
         assert draft.email == "test.student@example.com"

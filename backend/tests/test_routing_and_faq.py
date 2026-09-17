@@ -6,7 +6,7 @@ from backend.agents.schemas import FAQAnswer
 from backend.app import create_app
 from backend.services.course_catalogue import CourseCatalogue
 from backend.services.chat_service import clean_customer_copy
-from backend.tests.conftest import FakeAIService, send
+from backend.tests.conftest import FakeAIService, authenticated_client, send
 
 
 def test_company_course_information_is_loaded_without_invented_intakes():
@@ -335,7 +335,7 @@ def test_fabricated_high_risk_facts_are_replaced_with_staff_confirmation(tmp_pat
         },
         ai_service=FabricatingAIService(),
     )
-    client = app.test_client()
+    client = authenticated_client(app)
     conversation_id = client.post("/api/conversations").get_json()["conversation_id"]
     reply = send(client, conversation_id, "How much is the course fee?").get_json()[
         "message"

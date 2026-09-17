@@ -2,6 +2,7 @@
 
 import json
 import re
+from uuid import uuid4
 
 import pytest
 
@@ -133,6 +134,7 @@ class FakeAIService:
             {
                 "message": message,
                 "context": context,
+                "catalogue_context": catalogue_context,
                 "customer_first_name": customer_first_name,
             }
         )
@@ -394,7 +396,7 @@ def app(tmp_path, fake_ai):
 
 @pytest.fixture()
 def client(app):
-    return app.test_client()
+    return authenticated_client(app)
 
 
 @pytest.fixture()
@@ -407,3 +409,34 @@ def send(client, conversation_id, message):
         "/api/chat",
         json={"conversation_id": conversation_id, "message": message},
     )
+
+
+def authenticated_client(app, email=None, password="test-password-123"):
+    """Return a participant client whose mutating requests include its CSRF token."""
+    client = app.test_client()
+    address = email or f"participant-{uuid4().hex}@example.com"
+    response = client.post(
+        "/api/auth/register",
+        json={
+            "full_name": "Test Participant",
+            "email": address,
+            "password": password,
+        },
+    )
+    assert response.status_code == 201
+    csrf_token = response.get_json()["csrf_token"]
+    original_open = client.open
+
+    def open_with_csrf(*args, **kwargs):
+        method = str(kwargs.get("method", "GET")).upper()
+        if method not in {"GET", "HEAD", "OPTIONS"}:
+            headers = dict(kwargs.get("headers") or {})
+            headers.setdefault("X-CSRF-Token", csrf_token)
+            kwargs["headers"] = headers
+        return original_open(*args, **kwargs)
+
+    client.open = open_with_csrf
+    client.test_email = address
+    client.test_password = password
+    client.test_csrf_token = csrf_token
+    return client

@@ -1,152 +1,116 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
-import ChatHeader from "./components/ChatHeader.jsx";
-import ChatWindow from "./components/ChatWindow.jsx";
-import MessageInput from "./components/MessageInput.jsx";
+import ChatbotPage from "./components/ChatbotPage.jsx";
+import ParticipantPanel from "./components/ParticipantPanel.jsx";
+import StaffPortal from "./components/StaffPortal.jsx";
 import {
-  createConversation,
-  getConversationMessages,
-  sendChatMessage,
+  getAuthSession,
+  loginParticipant,
+  logoutParticipant,
+  registerParticipant,
+  setCsrfToken,
 } from "./services/chatApi.js";
-
-const STORAGE_KEY = "qm-training-conversation-id";
-const welcomeMessage = {
-  id: "welcome-message",
-  sender: "bot",
-  text: (
-    "Hi there! 👋 I’m the Q&M Training Assistant. I can answer questions about " +
-    "our 2-Day Basic Certificate in Dental Assisting or guide you through " +
-    "enrollment. How can I help you today?"
-  ),
-  timestamp: new Date().toISOString(),
-};
-
-const quickActions = [
-  { label: "About the course", message: "Tell me about the course" },
-  { label: "Course fee", message: "How much is the course fee?" },
-  { label: "Available dates", message: "What course dates are available?" },
-  { label: "Enroll now", message: "I’d like to enroll" },
-];
-
-function makeMessage(sender, text, timestamp = new Date().toISOString(), id) {
-  return {
-    id: id || `${sender}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-    sender,
-    text,
-    timestamp,
-  };
-}
-
-function mapStoredMessages(messages) {
-  if (!messages.length) {
-    return [welcomeMessage];
-  }
-  return messages.map((message) =>
-    makeMessage(
-      message.role === "assistant" ? "bot" : "user",
-      message.content,
-      message.timestamp,
-      message.id,
-    ),
-  );
-}
-
-function maskNricForDisplay(text) {
-  return text.replace(/\b([STFGM])\d{7}([A-Z])\b/gi, "$1*******$2");
-}
+import "./workspace.css";
 
 export default function App() {
-  const [messages, setMessages] = useState([welcomeMessage]);
+  if (window.location.pathname.startsWith("/staff")) {
+    return <div className="portal-root"><StaffPortal /></div>;
+  }
+  return <ParticipantPortal />;
+}
+
+function ParticipantPortal() {
+  const [auth, setAuth] = useState(null);
+  const [checking, setChecking] = useState(true);
   const [conversationId, setConversationId] = useState("");
-  const [isEnrollmentStarted, setIsEnrollmentStarted] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState("");
-  const initializationStarted = useRef(false);
+  const [showEnrollment, setShowEnrollment] = useState(false);
+  const [statusRevision, setStatusRevision] = useState(0);
 
   useEffect(() => {
-    if (initializationStarted.current) return;
-    initializationStarted.current = true;
-
-    async function initializeConversation() {
-      const savedId = localStorage.getItem(STORAGE_KEY);
-      try {
-        if (savedId) {
-          const history = await getConversationMessages(savedId);
-          setConversationId(savedId);
-          setMessages(mapStoredMessages(history.messages));
-          setIsEnrollmentStarted(Boolean(history.enrollment?.status));
-          return;
-        }
-        await startNewConversation();
-      } catch (requestError) {
-        localStorage.removeItem(STORAGE_KEY);
-        try {
-          await startNewConversation();
-        } catch (createError) {
-          setError(createError.message || requestError.message);
-        }
-      } finally {
-        setIsLoading(false);
-      }
-    }
-
-    initializeConversation();
+    getAuthSession()
+      .then((result) => {
+        setCsrfToken(result.csrf_token);
+        setAuth(result.authenticated ? result : null);
+      })
+      .finally(() => setChecking(false));
   }, []);
 
-  async function startNewConversation() {
+  async function logout() {
+    await logoutParticipant();
+    setCsrfToken("");
+    setAuth(null);
+  }
+
+  if (checking) {
+    return <div className="portal-root"><main className="login-page"><p>Loading your account…</p></main></div>;
+  }
+  if (!auth) {
+    return <div className="portal-root"><ParticipantAuth onAuthenticated={(result) => {
+      setCsrfToken(result.csrf_token);
+      setAuth(result);
+    }} /></div>;
+  }
+
+  return <div className="portal-root">
+    <nav className="public-navigation" aria-label="Participant portal">
+      <strong>Q&amp;M Academy</strong>
+      <span>
+        <button type="button" className="text-button" onClick={() => setShowEnrollment((value) => !value)}>{showEnrollment ? "Return to chat" : "Enrollment & payment"}</button>
+        {" · "}{auth.user.full_name}{" · "}<button type="button" className="text-button" onClick={logout}>Sign out</button>
+      </span>
+    </nav>
+    <div className={`participant-workspace${showEnrollment ? " participant-workspace--expanded" : ""}`}>
+      <ChatbotPage userId={auth.user.id} onConversationChange={setConversationId} />
+      {showEnrollment && <ParticipantPanel conversationId={conversationId} revision={statusRevision} onUpdated={() => setStatusRevision((value) => value + 1)} />}
+    </div>
+  </div>;
+}
+
+function ParticipantAuth({ onAuthenticated }) {
+  const [mode, setMode] = useState("login");
+  const [fullName, setFullName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function submit(event) {
+    event.preventDefault();
+    setBusy(true);
     setError("");
-    setIsLoading(true);
     try {
-      const result = await createConversation();
-      localStorage.setItem(STORAGE_KEY, result.conversation_id);
-      setConversationId(result.conversation_id);
-      setMessages([{ ...welcomeMessage, timestamp: new Date().toISOString() }]);
-      setIsEnrollmentStarted(false);
+      const result = mode === "register"
+        ? await registerParticipant(fullName, email, password)
+        : await loginParticipant(email, password);
+      onAuthenticated(result);
     } catch (requestError) {
       setError(requestError.message);
     } finally {
-      setIsLoading(false);
+      setBusy(false);
     }
   }
 
-  async function handleSend(message) {
-    if (!conversationId) {
-      setError("A chat could not be started. Please select New Chat and try again.");
-      return;
-    }
-
-    setError("");
-    setMessages((current) => [
-      ...current,
-      makeMessage("user", maskNricForDisplay(message)),
-    ]);
-    setIsLoading(true);
-
-    try {
-      const response = await sendChatMessage(message, conversationId);
-      const reply = response.message;
-      setMessages((current) => [
-        ...current,
-        makeMessage("bot", reply.content, reply.timestamp, reply.id),
-      ]);
-      setIsEnrollmentStarted(Boolean(response.enrollment?.status));
-    } catch (requestError) {
-      setError(requestError.message);
-    } finally {
-      setIsLoading(false);
-    }
-  }
-
-  return (
-    <main className="chat-shell" aria-labelledby="chat-title">
-      <ChatHeader onNewChat={startNewConversation} disabled={isLoading} />
-      <ChatWindow
-        messages={messages}
-        isLoading={isLoading}
-        quickActions={isEnrollmentStarted ? [] : quickActions}
-        onQuickAction={handleSend}
-      />
-      <MessageInput onSend={handleSend} isLoading={isLoading} error={error} />
-    </main>
-  );
+  return <main className="login-page">
+    <div className="login-intro">
+      <a href="/" className="brand-link">Q&amp;M Academy</a>
+      <span className="eyebrow">Participant portal</span>
+      <h1>Course support, all in one place.</h1>
+      <p>Ask course questions, continue your enrollment and return to your saved conversation.</p>
+      <a className="back-link" href="/staff">Staff sign in →</a>
+    </div>
+    <section className="login-card" aria-labelledby="participant-auth-title">
+      <span className="eyebrow">{mode === "register" ? "Create account" : "Welcome back"}</span>
+      <h2 id="participant-auth-title">{mode === "register" ? "Register for the portal" : "Sign in to continue"}</h2>
+      <form className="stack-form" onSubmit={submit}>
+        {mode === "register" && <label>Full name<input autoComplete="name" value={fullName} onChange={(event) => setFullName(event.target.value)} required /></label>}
+        <label>Email<input type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} required /></label>
+        <label>Password<input type="password" autoComplete={mode === "register" ? "new-password" : "current-password"} minLength="8" value={password} onChange={(event) => setPassword(event.target.value)} required /></label>
+        {error && <p className="notice-error" role="alert">{error}</p>}
+        <button className="primary-button" disabled={busy} type="submit">{busy ? "Please wait…" : mode === "register" ? "Create account" : "Sign in"}</button>
+      </form>
+      <button className="text-button auth-mode-button" type="button" onClick={() => { setMode(mode === "login" ? "register" : "login"); setError(""); }}>
+        {mode === "login" ? "New participant? Create an account" : "Already registered? Sign in"}
+      </button>
+    </section>
+  </main>;
 }

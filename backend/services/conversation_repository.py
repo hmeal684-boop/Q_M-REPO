@@ -5,14 +5,20 @@ from backend.models import Conversation, EnrollmentDraft, Message, utc_now
 
 
 class ConversationRepository:
-    def create(self):
-        conversation = Conversation()
+    def create(self, user_id=None):
+        conversation = Conversation(user_id=user_id)
         db.session.add(conversation)
         db.session.commit()
         return conversation
 
     def get(self, conversation_id):
         return db.session.get(Conversation, conversation_id)
+
+    def get_for_user(self, conversation_id, user_id):
+        return Conversation.query.filter_by(
+            id=conversation_id,
+            user_id=user_id,
+        ).one_or_none()
 
     def add_message(
         self,
@@ -23,6 +29,9 @@ class ConversationRepository:
         agent_name=None,
         detected_intent=None,
         classification_confidence=None,
+        image_url=None,
+        image_alt=None,
+        image_status=None,
     ):
         conversation.updated_at = utc_now()
         message = Message(
@@ -32,6 +41,9 @@ class ConversationRepository:
             agent_name=agent_name,
             detected_intent=detected_intent,
             classification_confidence=classification_confidence,
+            image_url=image_url,
+            image_alt=image_alt,
+            image_status=image_status,
         )
         db.session.add(message)
         db.session.flush()

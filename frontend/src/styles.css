@@ -215,6 +215,28 @@ input:focus-visible {
   line-height: 1.52;
 }
 
+.message-attachment-link {
+  display: block;
+  margin-top: 12px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #f4f8f5;
+}
+
+.message-attachment-image {
+  display: block;
+  width: 100%;
+  max-width: 560px;
+  height: auto;
+  object-fit: contain;
+  cursor: zoom-in;
+}
+
+.message-attachment-link:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 3px;
+}
+
 .message-bubble--bot {
   border: 1px solid rgba(0, 79, 67, 0.07);
   border-bottom-left-radius: 5px;

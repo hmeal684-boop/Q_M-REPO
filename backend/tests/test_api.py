@@ -3,7 +3,7 @@
 import pytest
 
 from backend.app import create_app
-from backend.tests.conftest import FailingAIService, send
+from backend.tests.conftest import FailingAIService, authenticated_client, send
 
 
 def test_health_endpoint(client):
@@ -76,7 +76,7 @@ def test_history_survives_a_new_application_instance(tmp_path, fake_ai):
         {"TESTING": True, "SQLALCHEMY_DATABASE_URI": database_uri},
         ai_service=fake_ai,
     )
-    first_client = first_app.test_client()
+    first_client = authenticated_client(first_app, "resume@example.com")
     conversation_id = first_client.post("/api/conversations").get_json()[
         "conversation_id"
     ]
@@ -86,7 +86,13 @@ def test_history_survives_a_new_application_instance(tmp_path, fake_ai):
         {"TESTING": True, "SQLALCHEMY_DATABASE_URI": database_uri},
         ai_service=fake_ai,
     )
-    reloaded = second_app.test_client().get(
+    second_client = second_app.test_client()
+    login = second_client.post(
+        "/api/auth/login",
+        json={"email": "resume@example.com", "password": "test-password-123"},
+    )
+    csrf = login.get_json()["csrf_token"]
+    reloaded = second_client.get(
         f"/api/conversations/{conversation_id}/messages"
     )
     assert reloaded.status_code == 200
@@ -99,7 +105,7 @@ def test_enrollment_progress_survives_application_restart(tmp_path, fake_ai):
         {"TESTING": True, "SQLALCHEMY_DATABASE_URI": database_uri},
         ai_service=fake_ai,
     )
-    first_client = first_app.test_client()
+    first_client = authenticated_client(first_app, "progress@example.com")
     conversation_id = first_client.post("/api/conversations").get_json()[
         "conversation_id"
     ]
@@ -111,6 +117,19 @@ def test_enrollment_progress_survives_application_restart(tmp_path, fake_ai):
         ai_service=fake_ai,
     )
     second_client = second_app.test_client()
+    login = second_client.post(
+        "/api/auth/login",
+        json={"email": "progress@example.com", "password": "test-password-123"},
+    )
+    csrf = login.get_json()["csrf_token"]
+    original_open = second_client.open
+    def open_with_csrf(*args, **kwargs):
+        if str(kwargs.get("method", "GET")).upper() not in {"GET", "HEAD", "OPTIONS"}:
+            headers = dict(kwargs.get("headers") or {})
+            headers.setdefault("X-CSRF-Token", csrf)
+            kwargs["headers"] = headers
+        return original_open(*args, **kwargs)
+    second_client.open = open_with_csrf
     history = second_client.get(
         f"/api/conversations/{conversation_id}/messages"
     ).get_json()
@@ -145,7 +164,7 @@ def test_context_is_bounded(tmp_path, fake_ai):
         },
         ai_service=fake_ai,
     )
-    client = app.test_client()
+    client = authenticated_client(app)
     conversation_id = client.post("/api/conversations").get_json()["conversation_id"]
     for question in ("course duration?", "course fee?", "course location?", "course capacity?"):
         send(client, conversation_id, question)
@@ -165,7 +184,7 @@ def test_missing_api_configuration_returns_safe_error(tmp_path):
             "SQLALCHEMY_DATABASE_URI": f"sqlite:///{(tmp_path / 'missing.db').as_posix()}",
         }
     )
-    client = app.test_client()
+    client = authenticated_client(app)
     conversation_id = client.post("/api/conversations").get_json()["conversation_id"]
     response = send(client, conversation_id, "What is the fee?")
     assert response.status_code == 503
@@ -183,7 +202,7 @@ def test_provider_failure_does_not_leak_details_or_secret(tmp_path):
         },
         ai_service=FailingAIService(),
     )
-    client = app.test_client()
+    client = authenticated_client(app)
     conversation_id = client.post("/api/conversations").get_json()["conversation_id"]
     response = send(client, conversation_id, "What is the fee?")
     rendered = response.get_data(as_text=True)

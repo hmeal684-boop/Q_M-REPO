@@ -18,7 +18,11 @@ class Conversation(db.Model):
     __tablename__ = "conversations"
 
     id = db.Column(db.String(36), primary_key=True, default=new_id)
+    user_id = db.Column(
+        db.String(36), db.ForeignKey("users.id"), nullable=True, index=True
+    )
     active_intent = db.Column(db.String(32), nullable=True)
+    pending_followup = db.Column(db.String(32), nullable=True)
     status = db.Column(db.String(32), nullable=False, default="active")
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=utc_now)
     updated_at = db.Column(
@@ -34,6 +38,7 @@ class Conversation(db.Model):
         cascade="all, delete-orphan",
         uselist=False,
     )
+    user = db.relationship("User", back_populates="conversations")
 
 
 class Message(db.Model):
@@ -48,6 +53,9 @@ class Message(db.Model):
     agent_name = db.Column(db.String(64), nullable=True)
     detected_intent = db.Column(db.String(32), nullable=True)
     classification_confidence = db.Column(db.Float, nullable=True)
+    image_url = db.Column(db.String(500), nullable=True)
+    image_alt = db.Column(db.String(500), nullable=True)
+    image_status = db.Column(db.String(64), nullable=True)
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=utc_now)
 
     conversation = db.relationship("Conversation", back_populates="messages")
@@ -84,4 +92,15 @@ class EnrollmentDraft(db.Model):
     conversation = db.relationship("Conversation", back_populates="enrollment_draft")
 
 
-__all__ = ["Conversation", "EnrollmentDraft", "Message", "date", "db", "utc_now"]
+from backend.models.accounts import User
+
+
+__all__ = [
+    "Conversation",
+    "EnrollmentDraft",
+    "Message",
+    "User",
+    "date",
+    "db",
+    "utc_now",
+]
