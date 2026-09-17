@@ -20,12 +20,15 @@ The current implementation includes:
   SkillsFuture amount, and PayNow amount details
 - Deterministic Python validation and explicit confirmation before saving
 - An additive enrollment-schema migration that preserves existing records
+- Participant registration, login, protected chat, and account-owned conversations
+- Role-protected staff operations and finance workspaces
+- Course-date management, payment review, private document delivery, and queued integrations
 - SQLite locally, with PostgreSQL support through `DATABASE_URL`
 - Database-backed history, browser conversation resumption, and a new-conversation action
 
-Payment verification, invoices, receipts, email/WhatsApp integration, screenshots,
-follow-up scheduling, OneDrive, TimeTree, and staff dashboards remain outside this
-update.
+External email, WhatsApp and payment-vision actions remain disabled until their
+server-side credentials are configured. Payment evidence always requires staff
+review unless an approved verification policy is explicitly enabled.
 
 ## Main Documentation
 
@@ -88,7 +91,11 @@ python -m flask --app backend.app run --debug --port 5000
 ```
 
 Fill `OPENAI_API_KEY` only in `backend/.env`. Never put it in a frontend
-variable or commit it. Optional backend settings are:
+variable or commit it. Set a private `FLASK_SECRET_KEY` and
+`DATA_ENCRYPTION_KEY` outside development. Staff accounts are supplied as JSON
+containing Werkzeug password hashes; plaintext staff passwords do not belong in
+the file or repository. Optional backend settings are documented in
+`backend/.env.example`.
 
 ```dotenv
 OPENAI_MODEL=
@@ -119,11 +126,15 @@ Open `http://127.0.0.1:5173`. The frontend uses only:
 VITE_API_BASE_URL=http://127.0.0.1:5000
 ```
 
+Participants register or sign in at `/`. Staff use `/staff`.
+
 ## API Summary
 
-- `POST /api/conversations` creates a new conversation.
+- `POST /api/auth/register`, `/api/auth/login`, and `/api/auth/logout` manage participant sessions.
+- `POST /api/conversations` creates a conversation owned by the signed-in participant.
 - `GET /api/conversations/<conversation_id>/messages` reloads its masked history.
 - `POST /api/chat` accepts `{"conversation_id": "...", "message": "..."}`.
+- `/api/staff/*` routes require a configured staff account and enforce role boundaries.
 - `GET /health` reports process health without returning configuration or secrets.
 
 The chat response includes `conversation_id`, an assistant `message`, development

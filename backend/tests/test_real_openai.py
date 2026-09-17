@@ -5,7 +5,7 @@ import os
 import pytest
 
 from backend.app import create_app
-from backend.tests.conftest import send
+from backend.tests.conftest import authenticated_client, send
 
 
 @pytest.mark.skipif(
@@ -19,7 +19,7 @@ def test_real_faq_smoke(tmp_path):
             "SQLALCHEMY_DATABASE_URI": f"sqlite:///{(tmp_path / 'real.db').as_posix()}",
         }
     )
-    client = app.test_client()
+    client = authenticated_client(app)
     conversation_id = client.post("/api/conversations").get_json()["conversation_id"]
     response = send(client, conversation_id, "What is the course duration?")
     assert response.status_code == 200

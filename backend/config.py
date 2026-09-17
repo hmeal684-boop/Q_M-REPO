@@ -1,6 +1,8 @@
 """Environment-backed configuration for the Q&M chatbot API."""
 
 import os
+import json
+from datetime import timedelta
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -21,6 +23,16 @@ def _database_url():
     return f"sqlite:///{sqlite_path}"
 
 
+def _json_setting(name, default):
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return default
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError as error:
+        raise RuntimeError(f"{name} must contain valid JSON.") from error
+
+
 class Config:
     """Settings shared by local development and production deployments."""
 
@@ -33,7 +45,70 @@ class Config:
     CONVERSATION_CONTEXT_MESSAGE_LIMIT = int(
         os.getenv("CONVERSATION_CONTEXT_MESSAGE_LIMIT", "20")
     )
-    CORS_ORIGINS = (
-        "http://127.0.0.1:5173",
-        "http://localhost:5173",
+    CORS_ORIGINS = tuple(
+        value.strip()
+        for value in os.getenv(
+            "CORS_ORIGINS",
+            "http://127.0.0.1:5173,http://localhost:5173",
+        ).split(",")
+        if value.strip()
     )
+    PRODUCTION = os.getenv("APP_ENV", "development") == "production"
+    MAX_CONTENT_LENGTH = 10 * 1024 * 1024
+    SESSION_COOKIE_HTTPONLY = True
+    SESSION_COOKIE_SAMESITE = "Lax"
+    SESSION_COOKIE_SECURE = PRODUCTION
+    PERMANENT_SESSION_LIFETIME = timedelta(hours=8)
+
+    DATA_ENCRYPTION_KEY = os.getenv("DATA_ENCRYPTION_KEY", "").strip()
+    STORAGE_DIR = os.getenv("STORAGE_DIR", "").strip() or str(
+        BACKEND_DIR / "data" / "private"
+    )
+    STAFF_ACCOUNTS = _json_setting("STAFF_ACCOUNTS_JSON", {})
+    AUTOMATION_API_TOKEN = os.getenv("AUTOMATION_API_TOKEN", "").strip()
+    CONSENT_VERSION = os.getenv("CONSENT_VERSION", "2026-09")
+    RETENTION_DAYS = int(os.getenv("RETENTION_DAYS", "365"))
+    FOLLOWUP_HOURS = tuple(
+        int(value)
+        for value in os.getenv("FOLLOWUP_HOURS", "48,96,144").split(",")
+    )
+
+    SMTP_HOST = os.getenv("SMTP_HOST", "").strip()
+    SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+    SMTP_FROM = os.getenv("SMTP_FROM", "").strip()
+    SMTP_USERNAME = os.getenv("SMTP_USERNAME", "").strip()
+    SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
+    SMTP_STARTTLS = os.getenv("SMTP_STARTTLS", "true").lower() == "true"
+
+    WHATSAPP_ACCESS_TOKEN = os.getenv("WHATSAPP_ACCESS_TOKEN", "").strip()
+    WHATSAPP_PHONE_NUMBER_ID = os.getenv("WHATSAPP_PHONE_NUMBER_ID", "").strip()
+    WHATSAPP_APP_SECRET = os.getenv("WHATSAPP_APP_SECRET", "").strip()
+    WHATSAPP_VERIFY_TOKEN = os.getenv("WHATSAPP_VERIFY_TOKEN", "").strip()
+    WHATSAPP_API_VERSION = os.getenv("WHATSAPP_API_VERSION", "v23.0")
+    WHATSAPP_FOLLOWUP_TEMPLATE = os.getenv("WHATSAPP_FOLLOWUP_TEMPLATE", "")
+    WHATSAPP_TEMPLATE_LANGUAGE = os.getenv("WHATSAPP_TEMPLATE_LANGUAGE", "en")
+
+    PAYMENT_AUTO_CONFIRM = False
+    PAYMENT_VISION_MODEL = os.getenv("PAYMENT_VISION_MODEL", "").strip()
+    ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "").strip()
+    PAYMENT_CONFIDENCE_THRESHOLD = float(
+        os.getenv("PAYMENT_CONFIDENCE_THRESHOLD", "0.98")
+    )
+    PAYMENT_DUE_DAYS = int(os.getenv("PAYMENT_DUE_DAYS", "14"))
+    PAYNOW_RECIPIENT_ALIASES = _json_setting("PAYNOW_RECIPIENT_ALIASES_JSON", [])
+    ACCOUNTANT_REPORT_EMAIL = os.getenv("ACCOUNTANT_REPORT_EMAIL", "").strip()
+    STAFF_ALERT_EMAIL = os.getenv("STAFF_ALERT_EMAIL", "").strip()
+
+    INVOICE_SIGNATURE_PATH = os.getenv("INVOICE_SIGNATURE_PATH", "").strip()
+    FINANCE_SIGNATURE_PATH = os.getenv(
+        "FINANCE_SIGNATURE_PATH", INVOICE_SIGNATURE_PATH
+    ).strip()
+    PAYNOW_QR_PATH = os.getenv("PAYNOW_QR_PATH", "").strip()
+    SKILLSFUTURE_INSTRUCTIONS_PATH = os.getenv(
+        "SKILLSFUTURE_INSTRUCTIONS_PATH", ""
+    ).strip()
+    COMPANY_STAMP_PATH = os.getenv("COMPANY_STAMP_PATH", "").strip()
+    FINANCE_COMPANY_NAME = os.getenv(
+        "FINANCE_COMPANY_NAME", "Q&M Dental Group (Singapore) Limited"
+    )
+    RETENTION_ENABLED = os.getenv("RETENTION_ENABLED", "false").lower() == "true"

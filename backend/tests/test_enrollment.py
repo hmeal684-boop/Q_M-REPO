@@ -10,7 +10,7 @@ from backend.extensions import db
 from backend.models import EnrollmentDraft
 from backend.services.course_catalogue import CATALOGUE_PATH, CourseCatalogue
 from backend.services.validation import has_valid_identity_checksum, validate_field
-from backend.tests.conftest import FakeAIService, send
+from backend.tests.conftest import FakeAIService, authenticated_client, send
 
 
 SYNTHETIC_NAME = "Test Student"
@@ -216,7 +216,7 @@ def test_all_nine_enrollment_fields_are_stored_and_confirmed(
         ai_service=fake_ai,
         catalogue=dated_catalogue,
     )
-    client = app.test_client()
+    client = authenticated_client(app)
     conversation_id = client.post("/api/conversations").get_json()["conversation_id"]
     send(client, conversation_id, "I want to enroll")
     response = send(
@@ -432,7 +432,7 @@ def test_later_payment_extraction_cannot_revalidate_or_replace_saved_identity(
         },
         ai_service=EchoingDraftFieldsAI(),
     )
-    client = app.test_client()
+    client = authenticated_client(app)
     conversation_id = client.post("/api/conversations").get_json()["conversation_id"]
     for message in (
         "I want to enroll",
@@ -487,7 +487,7 @@ def test_extraction_cannot_fill_a_field_absent_from_the_current_message(tmp_path
         },
         ai_service=InventingAI(),
     )
-    client = app.test_client()
+    client = authenticated_client(app)
     conversation_id = client.post("/api/conversations").get_json()["conversation_id"]
     send(client, conversation_id, "I want to enroll")
     send(client, conversation_id, f"My name is {SYNTHETIC_NAME}")

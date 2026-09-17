@@ -31,6 +31,11 @@ yarn-error.log*
 *.sqlite
 *.sqlite3
 *.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.bak
+*.backup
 
 # Secrets and environment overrides
 .env
@@ -39,6 +44,8 @@ yarn-error.log*
 *.pem
 *.key
 secrets/
+credentials*.json
+service-account*.json
 
 # Participant uploads, payment evidence and generated documents
 uploads/
@@ -47,6 +54,14 @@ payment-screenshots/
 generated/
 generated-documents/
 generated-pdfs/
+backend/data/private/
+private-data/
+customer-data/
+
+# Generated archives and spreadsheets
+*.zip
+*.xls
+*.xlsx
 
 # Logs, queues and temporary files
 *.log
@@ -62,3 +77,5 @@ celerybeat-schedule*
 .DS_Store
 Thumbs.db
 Desktop.ini
+~$*
+/chatbot_transfer.zip

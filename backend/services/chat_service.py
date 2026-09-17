@@ -6,6 +6,7 @@ from datetime import timezone
 
 from backend.extensions import db
 from backend.services.enrollment_service import EnrollmentService
+from backend.services.faq_attachments import FAQAttachmentCatalogue
 from backend.services.privacy import mask_nrics_in_text, redact_for_classification
 
 
@@ -21,6 +22,7 @@ class ChatService:
         self.ai_service = ai_service
         self.context_limit = context_limit
         self.enrollment = EnrollmentService(ai_service, catalogue, repository)
+        self.faq_attachments = FAQAttachmentCatalogue()
 
     def respond(self, conversation, user_text):
         user_message = self.repository.add_message(
@@ -82,6 +84,9 @@ class ChatService:
                     reply = _personalise_reply(reply, name)
             if conversation.active_intent != "enrollment":
                 conversation.active_intent = "faq"
+            attachment = self.faq_attachments.for_reply(
+                user_text, faq_result.matched_topics
+            )
         elif classification.intent == "enrollment":
             conversation.active_intent = "enrollment"
             reply, draft = self.enrollment.handle(
@@ -90,9 +95,11 @@ class ChatService:
                 self._format_context(prior_messages),
             )
             agent_name = "enrollment_agent"
+            attachment = None
         else:
             reply = UNCLEAR_REPLY
             agent_name = "intent_classifier"
+            attachment = None
 
         assistant_message = self.repository.add_message(
             conversation,
@@ -101,6 +108,9 @@ class ChatService:
             agent_name=agent_name,
             detected_intent=classification.intent,
             classification_confidence=classification.confidence,
+            image_url=attachment["image_url"] if attachment else None,
+            image_alt=attachment["image_alt"] if attachment else None,
+            image_status=attachment["image_status"] if attachment else None,
         )
         db.session.commit()
 
@@ -132,7 +142,7 @@ def serialize_message(message):
     timestamp = message.created_at
     if timestamp.tzinfo is None:
         timestamp = timestamp.replace(tzinfo=timezone.utc)
-    return {
+    serialized = {
         "id": message.id,
         "role": message.role,
         "content": clean_customer_copy(mask_nrics_in_text(message.content))
@@ -143,6 +153,13 @@ def serialize_message(message):
         "classification_confidence": message.classification_confidence,
         "timestamp": timestamp.isoformat().replace("+00:00", "Z"),
     }
+    if message.image_url and message.image_alt:
+        serialized.update(
+            image_url=message.image_url,
+            image_alt=message.image_alt,
+            image_status=message.image_status,
+        )
+    return serialized
 
 
 def serialize_enrollment(draft, catalogue=None):
