@@ -22,6 +22,7 @@ from backend.services.crewai_service import CrewAIService
 from backend.services.database_migrations import apply_additive_migrations
 from backend.services.delivery_service import DeliveryService
 from backend.services.finance_service import FinanceService
+from backend.services.master_invoice_service import MasterInvoiceService
 from backend.services.operations_service import OperationsService
 from backend.services.security import (
     EncryptedStorage,
@@ -44,6 +45,18 @@ def create_app(test_config=None, ai_service=None, catalogue=None):
     app.config.from_object(Config)
     if test_config:
         app.config.update(test_config)
+    if (
+        app.config.get("TESTING")
+        and test_config
+        and "MASTER_INVOICE_PATH" not in test_config
+    ):
+        database_uri = app.config.get("SQLALCHEMY_DATABASE_URI", "")
+        if database_uri.startswith("sqlite:///"):
+            database_file = database_uri.removeprefix("sqlite:///")
+            if database_file != ":memory:":
+                app.config["MASTER_INVOICE_PATH"] = str(
+                    Path(database_file).with_name("Master_Invoice_List.xlsx")
+                )
     if app.config.get("PRODUCTION") and app.config["SECRET_KEY"] == "development-only-change-me":
         raise RuntimeError("A private FLASK_SECRET_KEY is required in production.")
 
@@ -56,12 +69,20 @@ def create_app(test_config=None, ai_service=None, catalogue=None):
     register_quality(app)
 
     repository = ConversationRepository()
-    catalogue = catalogue or CourseCatalogue()
+    catalogue = catalogue or CourseCatalogue(
+        enable_demo_intakes=app.config.get("ENABLE_DEMO_INTAKES", False)
+    )
     app.extensions["agent_service"] = ai_service
     app.extensions["catalogue"] = catalogue
     app.extensions["repository"] = repository
     delivery = DeliveryService()
     finance_service = FinanceService(catalogue, delivery, EncryptedStorage())
+    master_invoice_service = MasterInvoiceService(
+        app.config["MASTER_INVOICE_PATH"],
+        app.config["MASTER_INVOICE_TEMPLATE_PATH"],
+        app.config["MASTER_INVOICE_LOCK_TIMEOUT_SECONDS"],
+        catalogue,
+    )
     operations_service = OperationsService(
         catalogue,
         delivery,
@@ -71,6 +92,7 @@ def create_app(test_config=None, ai_service=None, catalogue=None):
     app.extensions.update(
         delivery=delivery,
         finance=finance_service,
+        master_invoice=master_invoice_service,
         operations=operations_service,
     )
 
@@ -81,7 +103,11 @@ def create_app(test_config=None, ai_service=None, catalogue=None):
     app.register_blueprint(
         create_operations_blueprint(operations_service, staff_required)
     )
-    app.register_blueprint(create_finance_blueprint(finance_service, staff_required))
+    app.register_blueprint(
+        create_finance_blueprint(
+            finance_service, staff_required, master_invoice_service
+        )
+    )
 
     def current_ai_service():
         service = app.extensions.get("agent_service")
@@ -105,6 +131,7 @@ def create_app(test_config=None, ai_service=None, catalogue=None):
                     "conversation_id": conversation.id,
                     "status": conversation.status,
                     "created_at": _iso_timestamp(conversation.created_at),
+                    "demo_intakes_enabled": catalogue.enable_demo_intakes,
                 }
             ),
             201,
@@ -156,6 +183,7 @@ def create_app(test_config=None, ai_service=None, catalogue=None):
                 catalogue=catalogue,
                 ai_service=current_ai_service(),
                 context_limit=app.config["CONVERSATION_CONTEXT_MESSAGE_LIMIT"],
+                master_invoice_service=master_invoice_service,
             )
             return jsonify(service.respond(conversation, payload["message"].strip()))
         except AIConfigurationError:

@@ -122,5 +122,39 @@ class FinanceAudit(db.Model):
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=utc_now)
 
 
+class MasterInvoiceExport(db.Model):
+    """Idempotent export state for one confirmed enrollment."""
+
+    __tablename__ = "master_invoice_exports"
+    id = db.Column(db.String(36), primary_key=True, default=new_id)
+    enrollment_id = db.Column(
+        db.String(36),
+        db.ForeignKey("enrollment_drafts.id"),
+        nullable=False,
+        unique=True,
+        index=True,
+    )
+    status = db.Column(db.String(24), nullable=False, default="pending", index=True)
+    attempts = db.Column(db.Integer, nullable=False, default=0)
+    last_error = db.Column(db.String(255))
+    exported_at = db.Column(db.DateTime(timezone=True))
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at = db.Column(
+        db.DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now
+    )
+    enrollment = db.relationship("EnrollmentDraft")
+
+
+class MasterInvoiceAudit(db.Model):
+    """Non-sensitive audit trail for workbook generation and access."""
+
+    __tablename__ = "master_invoice_audit"
+    id = db.Column(db.String(36), primary_key=True, default=new_id)
+    action = db.Column(db.String(32), nullable=False, index=True)
+    actor = db.Column(db.String(255), nullable=False)
+    record_count = db.Column(db.Integer, nullable=False, default=0)
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=utc_now)
+
+
 # Integration alias; both names refer to the same mapped table.
 FinanceDocument = FinancialDocument

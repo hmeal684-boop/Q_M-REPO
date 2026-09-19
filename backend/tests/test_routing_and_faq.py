@@ -284,13 +284,13 @@ def test_enrollment_routes_to_enrollment_agent(client, conversation_id):
     payload = send(client, conversation_id, "I would like to register").get_json()
     assert payload["routing"]["intent"] == "enrollment"
     assert payload["routing"]["agent"] == "enrollment_agent"
-    assert "full name" in payload["message"]["content"].casefold()
+    assert "s$600 nett" in payload["message"]["content"].casefold()
 
 
 def test_informal_misspelt_enrollment_request_is_understood(client, conversation_id):
     payload = send(client, conversation_id, "i wana enrl").get_json()
     assert payload["routing"]["intent"] == "enrollment"
-    assert "full name" in payload["message"]["content"].casefold()
+    assert "s$600 nett" in payload["message"]["content"].casefold()
 
 
 def test_misspelt_indirect_fee_question_routes_to_faq(client, conversation_id):
@@ -307,7 +307,7 @@ def test_customer_first_name_personalises_faq_during_enrollment(
     payload = send(client, conversation_id, "How much is the fee?").get_json()
     assert payload["message"]["content"].startswith("Hi Test 👋\n\n")
     assert payload["message"]["content"].count("Test") == 1
-    assert "continue by sending the remaining enrolment details" in payload["message"]["content"]
+    assert "still need your nric/fin" in payload["message"]["content"].casefold()
 
 
 def test_fee_concern_uses_customer_first_name_once(client, conversation_id):

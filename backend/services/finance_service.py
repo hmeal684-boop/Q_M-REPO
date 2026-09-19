@@ -42,6 +42,22 @@ def iso(value):
     return value.isoformat() if value else None
 
 
+def _intake_display(start, end=None):
+    if start is None:
+        return None
+    end = end or start
+    if start == end:
+        return f"{start.day} {start.strftime('%B %Y')}"
+    if start.year == end.year and start.month == end.month:
+        return f"{start.day}–{end.day} {start.strftime('%B %Y')}"
+    if start.year == end.year:
+        return f"{start.day} {start.strftime('%B')}–{end.day} {end.strftime('%B %Y')}"
+    return (
+        f"{start.day} {start.strftime('%B %Y')}–"
+        f"{end.day} {end.strftime('%B %Y')}"
+    )
+
+
 class FinanceService:
     def __init__(self, catalogue, delivery_service, storage_service=None, vision=None, document_service=None):
         self.catalogue = catalogue
@@ -109,7 +125,10 @@ class FinanceService:
         existing = self._invoice(draft)
         if existing:
             return existing
-        fee = money(self.catalogue.course_fee)
+        selected_fee = draft.course_fee or self.catalogue.course_fee
+        if selected_fee is None:
+            raise ValueError("The approved course fee must be confirmed before invoicing")
+        fee = money(selected_fee)
         sfc = money(draft.skillsfuture_amount or 0)
         paynow = money(draft.paynow_amount if draft.paynow_amount is not None else fee - sfc)
         if sfc + paynow != fee:
@@ -493,8 +512,24 @@ class FinanceService:
         docs = list(db.session.execute(db.select(FinancialDocument).where(FinancialDocument.enrollment_id == draft.id).order_by(FinancialDocument.created_at)).scalars())
         payments = list(db.session.execute(db.select(Payment).where(Payment.enrollment_id == draft.id)).scalars())
         total = sum((row.amount for row in payments), Decimal(0))
+        allocation = []
+        if Decimal(draft.skillsfuture_amount or 0) > 0:
+            allocation.append({"method": "SkillsFuture Credit", "amount": str(draft.skillsfuture_amount)})
+        if Decimal(draft.paynow_amount or 0) > 0:
+            allocation.append({"method": "PayNow", "amount": str(draft.paynow_amount)})
+        if draft.payment_method == "utap":
+            allocation.append({"method": "UTAP reimbursement", "amount": None})
+        intake_display = _intake_display(draft.intake_start_date or draft.preferred_intake_date, draft.intake_end_date)
+        expected = Decimal(draft.course_fee or (invoice.course_fee if invoice else 0) or 0)
+        payment_verification_status = (
+            "Verified" if expected > 0 and total == expected else "Awaiting staff verification"
+        )
         return {"id": draft.id, "conversation_id": draft.conversation_id, "full_name": draft.full_name, "email": draft.email, "mobile_number": draft.mobile_number,
-                "course": draft.course, "course_date": iso(draft.preferred_intake_date), "nric_masked": mask_nric(draft.nric),
+                "course": draft.course, "course_date": iso(draft.preferred_intake_date), "intake_id": draft.intake_id,
+                "intake_start_date": iso(draft.intake_start_date), "intake_end_date": iso(draft.intake_end_date),
+                "intake_display": intake_display, "intake_is_demo": bool(draft.intake_is_demo),
+                "payment_allocation": allocation, "payment_verification_status": payment_verification_status,
+                "nric_masked": mask_nric(draft.nric),
                 "status": case.status if case else ("Enquiry" if draft.status == "collecting" else "Enrolled"), "draft_status": draft.status,
                 "documents_blocked": self.document_blockers(draft, docs[-1] if docs else None), "created_at": iso(draft.created_at),
                 "invoice": {"id": invoice.id, "number": invoice.number, "course_fee": str(invoice.course_fee), "skillsfuture_amount": str(invoice.skillsfuture_amount), "net_payable": str(invoice.net_payable), "due_date": iso(invoice.due_date), "sent_at": iso(invoice.sent_at), "delivery_id": invoice.delivery_id} if invoice else None,

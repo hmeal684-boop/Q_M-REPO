@@ -1,18 +1,21 @@
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 
 export default function MessageInput({ onSend, isLoading, error }) {
   const [message, setMessage] = useState("");
   const [validationError, setValidationError] = useState("");
   const input = useRef(null);
+  const submitting = useRef(false);
 
   useEffect(() => {
     if (!isLoading) {
+      submitting.current = false;
       input.current?.focus();
     }
   }, [isLoading]);
 
   function handleSubmit(event) {
     event.preventDefault();
+    if (submitting.current || isLoading) return;
     const trimmedMessage = message.trim();
 
     if (!trimmedMessage) {
@@ -23,6 +26,7 @@ export default function MessageInput({ onSend, isLoading, error }) {
 
     setValidationError("");
     setMessage("");
+    submitting.current = true;
     onSend(trimmedMessage);
   }
 
