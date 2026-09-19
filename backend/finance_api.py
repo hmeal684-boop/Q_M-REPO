@@ -11,7 +11,9 @@ from backend.models import EnrollmentDraft
 from backend.models.finance import CreditNoteRequest, PaymentEvidence, PaymentReview
 
 
-def create_finance_blueprint(finance_service, staff_required):
+def create_finance_blueprint(
+    finance_service, staff_required, master_invoice_service=None
+):
     blueprint = Blueprint("finance", __name__)
     finance = finance_service
 
@@ -180,5 +182,44 @@ def create_finance_blueprint(finance_service, staff_required):
     def send_report():
         outbound = finance.queue_nightly_report()
         return jsonify(queued=outbound is not None, delivery_id=outbound.id if outbound else None)
+
+    if master_invoice_service is not None:
+        @blueprint.get("/api/staff/master-invoice/status")
+        @accountant
+        @action
+        def master_invoice_status():
+            return jsonify(master_invoice=master_invoice_service.status())
+
+        @blueprint.get("/api/staff/master-invoice/download")
+        @accountant
+        @action
+        def master_invoice_download():
+            workbook = master_invoice_service.download(actor())
+            response = send_file(
+                workbook,
+                mimetype=(
+                    "application/vnd.openxmlformats-officedocument."
+                    "spreadsheetml.sheet"
+                ),
+                as_attachment=True,
+                download_name="Master_Invoice_List.xlsx",
+            )
+            response.headers["Cache-Control"] = "no-store"
+            return response
+
+        @blueprint.post("/api/staff/master-invoice/regenerate")
+        @accountant
+        @action
+        def master_invoice_regenerate():
+            return jsonify(
+                master_invoice=master_invoice_service.regenerate(actor())
+            )
+
+        @blueprint.post("/api/staff/master-invoice/retry")
+        @accountant
+        @action
+        def master_invoice_retry():
+            master_invoice_service.retry_failed(actor())
+            return jsonify(master_invoice=master_invoice_service.status())
 
     return blueprint

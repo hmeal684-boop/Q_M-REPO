@@ -140,7 +140,8 @@ def test_enrollment_progress_survives_application_restart(tmp_path, fake_ai):
     resumed = send(
         second_client, conversation_id, "My NRIC is S1234567D"
     ).get_json()
-    assert "Test" in resumed["message"]["content"]
+    assert "NRIC/FIN: S*******D" in resumed["message"]["content"]
+    assert "Full name as shown" not in resumed["message"]["content"]
     assert "date of birth" in resumed["message"]["content"].casefold()
 
 

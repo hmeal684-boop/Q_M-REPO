@@ -6,9 +6,10 @@ client calls a Flask REST API. Flask controls the workflow, CrewAI coordinates
 three OpenAI-backed agents, and SQLAlchemy preserves conversations and enrollment
 drafts across reloads and later days.
 
-The course catalogue uses the latest supplied company reply information. Current
-intake dates remain empty until staff add approved future dates. Automated tests
-use only synthetic identities.
+The course catalogue uses the latest supplied company reply information. Approved
+client intake dates remain empty until staff add them. Three fictional prototype
+intakes are stored separately and appear only when `ENABLE_DEMO_INTAKES=true`.
+Automated tests use only synthetic identities.
 
 ## Current Phase
 
@@ -103,7 +104,13 @@ DATABASE_URL=
 CONVERSATION_CONTEXT_MESSAGE_LIMIT=20
 FLASK_SECRET_KEY=change-me
 FLASK_PORT=5000
+ENABLE_DEMO_INTAKES=false
 ```
+
+`ENABLE_DEMO_INTAKES` defaults to `false` and must remain disabled in production.
+Set it to `true` only for a local prototype demonstration. The displayed October,
+November and December 2026 dates are fictional, are visibly marked as demo dates,
+and are not confirmed Q&M course intakes.
 
 An empty `DATABASE_URL` uses `backend/data/qm_chatbot.db`. Production may use a
 PostgreSQL URL such as `postgresql://...`; credentials belong only in the ignored
@@ -140,6 +147,11 @@ Participants register or sign in at `/`. Staff use `/staff`.
 The chat response includes `conversation_id`, an assistant `message`, development
 `routing` metadata, and non-sensitive enrollment state. NRIC/FIN values are masked
 in API-rendered history and confirmation summaries.
+
+Confirmed enrollments are rebuilt into the private
+`backend/data/private/Master_Invoice_List.xlsx` export. The directory and all
+generated workbooks are Git-ignored and downloads require an accounting/admin
+staff session.
 
 ## Verification
 

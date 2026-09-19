@@ -34,3 +34,35 @@ def test_message_bubbles_render_only_explicit_accessible_image_metadata():
     assert "message.image_alt" in chatbot
     assert ".message-attachment-image" in stylesheet
     assert "width: 100%" in stylesheet
+
+
+def test_staff_portal_exposes_private_master_invoice_controls_only_in_accounts():
+    portal = (FRONTEND_ROOT / "components" / "StaffPortal.jsx").read_text(
+        encoding="utf-8"
+    )
+    assert 'tab === "accounts"' in portal
+    assert "MasterInvoicePanel" in portal
+    assert "/api/staff/master-invoice/download" in portal
+    assert "/api/staff/master-invoice/regenerate" in portal
+    assert "/api/staff/master-invoice/retry" in portal
+    assert "Pending exports" in portal
+    assert "Failed exports" in portal
+    assert "intake_display" in portal
+    assert "intake_is_demo" in portal
+    assert "payment_allocation" in portal
+    assert "payment_verification_status" in portal
+
+
+def test_demo_mode_notice_is_visible_only_when_backend_metadata_enables_it():
+    header = (FRONTEND_ROOT / "components" / "ChatHeader.jsx").read_text(
+        encoding="utf-8"
+    )
+    chatbot = (FRONTEND_ROOT / "components" / "ChatbotPage.jsx").read_text(
+        encoding="utf-8"
+    )
+    stylesheet = (FRONTEND_ROOT / "styles.css").read_text(encoding="utf-8")
+
+    assert "demoMode &&" in header
+    assert "Demo intake dates" in header
+    assert "demo_intakes_enabled" in chatbot
+    assert ".demo-mode-badge" in stylesheet

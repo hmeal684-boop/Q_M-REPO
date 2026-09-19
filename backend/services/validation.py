@@ -39,7 +39,10 @@ def parse_date(value):
     if isinstance(value, date):
         return value
     try:
-        return date_parser.parse(str(value), dayfirst=True, fuzzy=False).date()
+        normalized = re.sub(r"(?i)(\d{1,2})(?:st|nd|rd|th)\b", r"\1", str(value))
+        if re.fullmatch(r"\d{4}-\d{2}-\d{2}", normalized.strip()):
+            return date.fromisoformat(normalized.strip())
+        return date_parser.parse(normalized, dayfirst=True, fuzzy=False).date()
     except (TypeError, ValueError, OverflowError):
         return None
 
@@ -63,8 +66,17 @@ def validate_field(field, value, catalogue):
 
     if field == "full_name":
         normalized = " ".join(str(value).split())
-        if len(normalized) < 2 or not any(character.isalpha() for character in normalized):
-            return None, "Please enter a valid full name containing letters."
+        parts = normalized.replace("-", " ").replace("'", " ").split()
+        if (
+            len(normalized) < 2
+            or not parts
+            or not all(part.isalpha() for part in parts)
+            or re.search(r"(?i)\b(?:nric|email|mobile|date of birth|dob)\b", normalized)
+        ):
+            return None, (
+                "Please enter the full name shown on the NRIC/FIN using letters, "
+                "spaces, hyphens or apostrophes."
+            )
         return normalized, None
 
     if field == "nric":
@@ -99,15 +111,10 @@ def validate_field(field, value, catalogue):
     if field == "preferred_intake_date":
         if not catalogue.has_intake_dates:
             return None, catalogue.no_intakes_message
-        normalized = parse_date(value)
-        if not normalized:
-            return None, "Please enter one of the available intake dates."
-        if normalized.isoformat() not in catalogue.intake_dates:
-            choices = ", ".join(
-                item["display"] for item in catalogue.course["intakes"]
-            )
-            return None, f"Please choose an available intake: {choices}."
-        return normalized, None
+        intake, error = catalogue.match_intake_selection(value)
+        if error:
+            return None, error
+        return date.fromisoformat(intake["start_date"]), None
 
     if field == "mobile_number":
         normalized = re.sub(r"[\s()\-]", "", str(value))
@@ -156,6 +163,11 @@ def validate_field(field, value, catalogue):
         )
 
     if field in {"skillsfuture_amount", "paynow_amount"}:
+        if catalogue.course_fee is None:
+            return None, (
+                "The approved course fee is not available yet. Staff confirmation "
+                "is required before payment amounts can be collected."
+            )
         try:
             amount_text = re.sub(
                 r"(?i)\bsgd\b|s\$|\$|,", "", str(value)

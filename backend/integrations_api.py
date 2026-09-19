@@ -193,6 +193,7 @@ def register_integrations(app, repository, catalogue, ai_factory, consent_state)
                 catalogue,
                 ai_factory(),
                 app.config["CONVERSATION_CONTEXT_MESSAGE_LIMIT"],
+                app.extensions.get("master_invoice"),
             )
             response = service.respond(conversation, text or "Hello")
             reply = response["message"]["content"]

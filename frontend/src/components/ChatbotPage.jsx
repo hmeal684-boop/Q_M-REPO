@@ -53,6 +53,7 @@ export default function ChatbotPage({ userId, onConversationChange }) {
   const [messages, setMessages] = useState([welcomeMessage]);
   const [conversationId, setConversationId] = useState("");
   const [isEnrollmentStarted, setIsEnrollmentStarted] = useState(false);
+  const [isDemoMode, setIsDemoMode] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const initializationStarted = useRef(false);
@@ -69,6 +70,7 @@ export default function ChatbotPage({ userId, onConversationChange }) {
           onConversationChange?.(savedId);
           setMessages(mapStoredMessages(history.messages));
           setIsEnrollmentStarted(Boolean(history.enrollment?.status));
+          setIsDemoMode(Boolean(history.enrollment?.demo_intakes_enabled));
           return;
         }
         await startNewConversation();
@@ -91,6 +93,7 @@ export default function ChatbotPage({ userId, onConversationChange }) {
       onConversationChange?.(result.conversation_id);
       setMessages([{ ...welcomeMessage, timestamp: new Date().toISOString() }]);
       setIsEnrollmentStarted(false);
+      setIsDemoMode(Boolean(result.demo_intakes_enabled));
     } catch (requestError) { setError(requestError.message); }
     finally { setIsLoading(false); }
   }
@@ -116,12 +119,13 @@ export default function ChatbotPage({ userId, onConversationChange }) {
         reply.image_status,
       )]);
       setIsEnrollmentStarted(Boolean(response.enrollment?.status));
+      setIsDemoMode(Boolean(response.enrollment?.demo_intakes_enabled));
     } catch (requestError) { setError(requestError.message); }
     finally { setIsLoading(false); }
   }
 
   return <main className="chat-shell" aria-labelledby="chat-title">
-    <ChatHeader onNewChat={startNewConversation} disabled={isLoading} />
+    <ChatHeader onNewChat={startNewConversation} disabled={isLoading} demoMode={isDemoMode} />
     <ChatWindow messages={messages} isLoading={isLoading} quickActions={isEnrollmentStarted ? [] : quickActions} onQuickAction={handleSend} />
     <MessageInput onSend={handleSend} isLoading={isLoading} error={error} />
   </main>;

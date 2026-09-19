@@ -6,6 +6,11 @@ from backend.extensions import db
 
 
 ENROLLMENT_DRAFT_COLUMNS = {
+    "course_fee": "NUMERIC(10, 2)",
+    "intake_id": "VARCHAR(64)",
+    "intake_start_date": "DATE",
+    "intake_end_date": "DATE",
+    "intake_is_demo": "BOOLEAN",
     "mobile_number": "VARCHAR(32)",
     "payment_method": "VARCHAR(32)",
     "skillsfuture_amount": "NUMERIC(10, 2)",
@@ -43,6 +48,12 @@ def apply_additive_migrations():
                             f"{name} {column_type}"
                         )
                     )
+            connection.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_enrollment_drafts_intake_id "
+                    "ON enrollment_drafts (intake_id)"
+                )
+            )
 
         if "conversations" in tables:
             existing = {

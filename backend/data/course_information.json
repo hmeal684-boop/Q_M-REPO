@@ -41,6 +41,33 @@
     },
     "website": "https://qandm.edu.sg/Courses/Dental-Assistant/4/Basic-Certificate-In-Dental-Assisting",
     "intakes": [],
+    "demo_intakes": [
+      {
+        "id": "demo-2026-10-19",
+        "start_date": "2026-10-19",
+        "end_date": "2026-10-20",
+        "display_date": "19–20 October 2026",
+        "status": "open",
+        "is_demo": true
+      },
+      {
+        "id": "demo-2026-11-16",
+        "start_date": "2026-11-16",
+        "end_date": "2026-11-17",
+        "display_date": "16–17 November 2026",
+        "status": "open",
+        "is_demo": true
+      },
+      {
+        "id": "demo-2026-12-14",
+        "start_date": "2026-12-14",
+        "end_date": "2026-12-15",
+        "display_date": "14–15 December 2026",
+        "status": "open",
+        "is_demo": true
+      }
+    ],
+    "demo_intake_notice": "Demo intake dates — prototype only. These are fictional dates and must be confirmed by staff before a real booking.",
     "no_intakes_message": "Our upcoming course dates are being updated. Please leave your contact details, and our team will confirm the available dates with you.",
     "skillsfuture": {
       "basic_tier_accepted": true,
@@ -118,25 +145,38 @@
         "preferred_intake_date": "Preferred course intake/date",
         "mobile_number": "Mobile number",
         "payment_method": "Payment method",
-        "skillsfuture_amount": "SkillsFuture amount, if applicable",
-        "paynow_amount": "PayNow amount, if applicable",
-        "payment_allocation": "Payment allocation"
+        "skillsfuture_amount": "SkillsFuture amount",
+        "paynow_amount": "PayNow amount",
+        "payment_allocation": "Payment allocation",
+        "course_fee": "Course fee"
       },
       "reply_templates": {
-        "introduction": "{greeting}\n\nThank you for your interest in enrolling in our Basic Certificate in Dental Assisting course! 📚\n\nTo prepare your enrolment, please provide the following information:\n\n1. Full name as shown on NRIC\n2. NRIC/FIN\n3. Date of birth\n4. Email address\n5. Mobile number\n6. Preferred course intake/date\n7. Payment method:\n   - Basic-tier SkillsFuture Credits\n   - PayNow\n   - UTAP reimbursement\n   - SkillsFuture and PayNow combination\n8. SkillsFuture amount, if applicable\n9. PayNow amount, if applicable\n\nOur upcoming intake dates are being updated. You may enter \"Awaiting confirmation\" for the preferred intake.\n\nYou may copy and complete this format:\n\nFull name:\nNRIC/FIN:\nDate of birth:\nEmail:\nMobile number:\nPreferred intake:\nPayment method:\nSkillsFuture amount:\nPayNow amount:\n\nPlease send everything in one message, and I’ll check the details for you 😊",
-        "partial": "{greeting}\n\nThanks! I’ve saved the valid enrolment details you provided ✅\n\nI still need the following:\n\n{missing_items}\n\nPlease send the remaining details in one message, and I’ll continue your enrolment 😊",
-        "validation": "{greeting},\n\nI need you to correct or complete the following information before continuing:\n\n{sections}\n\nPlease send only the corrected or missing information.",
-        "validation_corrections": "Information to correct:\n\n{correction_items}",
-        "validation_missing": "Information still needed:\n\n{missing_items}",
-        "confirmation": "{greeting}\n\nThank you! Please check your enrolment details below:\n\n📚 Course Details\n\n- Course: {course_name}\n- Course fee: {course_fee}\n- Duration: {duration}\n- Training time: {training_time}\n- Preferred intake: {preferred_intake}\n\n👤 Participant Details\n\n- Full name: {full_name}\n- NRIC/FIN: {masked_nric}\n- Date of birth: {date_of_birth}\n- Email: {email}\n- Mobile number: {mobile_number}\n\n💳 Payment Details\n\n- Payment method: {payment_method}\n- SkillsFuture amount: {skillsfuture_amount}\n- PayNow amount: {paynow_amount}\n- Total: {payment_total}\n\nPlease reply \"Confirm\" if everything is correct, or tell me which information you would like to change.",
-        "confirmed_awaiting_course_date": "Thank you, {first_name}! Your enrolment details have been recorded successfully ✅\n\n📅 Our team will contact you once the upcoming intake date and exact training venue are confirmed.\n\nIf you have any questions in the meantime, feel free to ask 😊",
-        "confirmed_with_course_date": "Thank you, {first_name}! Your enrolment details have been recorded successfully ✅\n\n📅 Selected intake: {preferred_intake}\n\nOur team will confirm the exact training venue with you. If you have any questions in the meantime, feel free to ask 😊",
+        "course_selection": "Here is the course currently available:\n\n**{course_name}**{course_code_line}\n\n- Course fee: {course_fee}\n- Duration: {duration}\n- Available intake: {intake}\n- SkillsFuture eligibility: {skillsfuture}\n\nWould you like to enrol in this course?",
+        "course_fee_unavailable": "The approved fee for the selected course is not available in the current course information. Staff must confirm the fee before payment details can be collected.",
+        "intake_selection": "{demo_heading}Please choose {intake_description}:\n\n{intake_choices}\n\nReply with 1, 2, 3, or the intake date.{demo_footer}",
+        "participant_details": "{intake_notice}Please provide your participant details using this template:\n\n{missing_template}\n\nYou may complete the template, send a numbered list, write the details naturally, or provide one field at a time.",
+        "continue_participant_details": "Please send the remaining details. You may copy this template:\n\n{missing_template}",
+        "outcome_saved": "Saved successfully\n\n{saved_items}",
+        "outcome_invalid": "Needs correction\n\n{invalid_items}",
+        "outcome_missing": "Still required\n\n{missing_items}",
+        "correct_nric_only": "Please send only your corrected NRIC/FIN. Your other valid details are already saved. For privacy, it will be masked after validation.",
+        "correct_fields": "Please send only the corrected information. Your other valid details are already saved.",
+        "payment_selection": "Payment summary\n\n- Course: {course_name}\n- Course fee: {course_fee}\n- SkillsFuture eligibility: {skillsfuture}\n- Amount currently due: {amount_due}\n\n{payment_question}",
+        "paynow_amount": "You selected PayNow. Please enter the PayNow amount. It must total the approved course fee of {course_fee}.",
+        "skillsfuture_amount": "Please enter the basic-tier SkillsFuture Credit amount you intend to use, up to the course fee of {course_fee}.",
+        "paynow_remainder": "The remaining amount is {remaining}. Please enter the PayNow amount so the full allocation equals {course_fee}.",
+        "utap_upfront_amount": "UTAP is reimbursed after course completion. Please enter the upfront PayNow amount; the approved course fee is {course_fee}.",
+        "confirmation": "Please review your enrolment before final submission.\n\nCourse\n\n- Course name: {course_name}{course_code_line}\n- Course fee: {course_fee}\n- Duration: {duration}\n- Training time: {training_time}\n- {intake_label}: {preferred_intake}\n{demo_note}\nParticipant\n\n- Full name: {full_name}\n- NRIC/FIN: {masked_nric}\n- Date of birth: {date_of_birth}\n- Email: {masked_email}\n- Mobile number: {masked_mobile}\n\nPayment\n\n- Method: {payment_method}\n{payment_lines}\n- Total allocated: {payment_total}\n- Remaining amount: {remaining}\n- Payment status: Awaiting staff verification\n\nReply with Confirm, Correct [field]: [new value], or Cancel.",
+        "confirmed_awaiting_course_date": "Thank you, {first_name}! Your enrolment details have been recorded successfully ✅\n\nReference: {enrollment_id}\n\n📅 Our team will contact you once the upcoming intake date and exact training venue are confirmed. Payment remains subject to staff verification.",
+        "confirmed_with_course_date": "Thank you, {first_name}! Your enrolment details have been recorded successfully ✅\n\nReference: {enrollment_id}\n\n📅 Selected intake: {preferred_intake}\n\nOur team will confirm the exact training venue. Payment remains subject to staff verification.",
         "already_awaiting_course_date": "{first_name}, your enrolment details are already saved. Our team will contact you once the upcoming intake date and exact training venue are confirmed.",
         "already_confirmed": "{first_name}, your enrolment is already confirmed. No further action is needed.",
         "correction_single": "Thanks, {first_name}. I’ve updated your {field_label}.",
         "correction_multiple": "Thanks, {first_name}. I’ve updated those details.",
         "correction_request": "{name_prefix}Please tell me which detail to change and provide the new value, for example: ‘Change my email to name@example.com’.",
+        "demo_note": "Demo note: This intake date is for prototype testing and must be confirmed by staff before a real booking.",
         "rejected": "{opening} Your enrolment has not been confirmed. Which detail would you like to correct?",
+        "cancelled": "Your enrolment has been cancelled. No completed enrolment has been created. If you wish to start again later, just let me know.",
         "faq_resume": "When you’re ready, you can continue by sending the remaining enrolment details 😊"
       }
     }

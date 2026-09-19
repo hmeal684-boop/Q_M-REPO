@@ -33,6 +33,13 @@ def _json_setting(name, default):
         raise RuntimeError(f"{name} must contain valid JSON.") from error
 
 
+def _boolean_setting(name, default=False):
+    raw = os.getenv(name)
+    if raw is None or not raw.strip():
+        return default
+    return raw.strip().casefold() in {"1", "true", "yes", "on"}
+
+
 class Config:
     """Settings shared by local development and production deployments."""
 
@@ -54,6 +61,9 @@ class Config:
         if value.strip()
     )
     PRODUCTION = os.getenv("APP_ENV", "development") == "production"
+    # Prototype-only dates are opt-in. Production remains disabled unless an
+    # operator deliberately overrides the setting for an isolated demo.
+    ENABLE_DEMO_INTAKES = _boolean_setting("ENABLE_DEMO_INTAKES", False)
     MAX_CONTENT_LENGTH = 10 * 1024 * 1024
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = "Lax"
@@ -63,6 +73,15 @@ class Config:
     DATA_ENCRYPTION_KEY = os.getenv("DATA_ENCRYPTION_KEY", "").strip()
     STORAGE_DIR = os.getenv("STORAGE_DIR", "").strip() or str(
         BACKEND_DIR / "data" / "private"
+    )
+    MASTER_INVOICE_PATH = os.getenv("MASTER_INVOICE_PATH", "").strip() or str(
+        Path(STORAGE_DIR) / "Master_Invoice_List.xlsx"
+    )
+    MASTER_INVOICE_TEMPLATE_PATH = os.getenv(
+        "MASTER_INVOICE_TEMPLATE_PATH", ""
+    ).strip()
+    MASTER_INVOICE_LOCK_TIMEOUT_SECONDS = float(
+        os.getenv("MASTER_INVOICE_LOCK_TIMEOUT_SECONDS", "10")
     )
     STAFF_ACCOUNTS = _json_setting("STAFF_ACCOUNTS_JSON", {})
     AUTOMATION_API_TOKEN = os.getenv("AUTOMATION_API_TOKEN", "").strip()

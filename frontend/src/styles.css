@@ -113,6 +113,19 @@ input:focus-visible {
   gap: 10px;
 }
 
+.demo-mode-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 9px;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  border-radius: 999px;
+  color: #ffffff;
+  font-size: 0.68rem;
+  font-weight: 750;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
 .online-status {
   display: inline-flex;
   align-items: center;

@@ -63,6 +63,11 @@ def test_existing_database_data_survives_enrollment_field_migration(tmp_path, fa
             column["name"] for column in inspect(db.engine).get_columns("enrollment_drafts")
         }
         assert {
+            "course_fee",
+            "intake_id",
+            "intake_start_date",
+            "intake_end_date",
+            "intake_is_demo",
             "mobile_number",
             "payment_method",
             "skillsfuture_amount",
@@ -83,6 +88,11 @@ def test_existing_database_data_survives_enrollment_field_migration(tmp_path, fa
         assert draft.full_name == "Test Student"
         assert draft.email == "test.student@example.com"
         assert draft.mobile_number is None
+        assert draft.course_fee is None
+        assert draft.intake_id is None
+        assert draft.intake_start_date is None
+        assert draft.intake_end_date is None
+        assert draft.intake_is_demo is None
         assert draft.payment_method is None
         assert draft.skillsfuture_amount is None
         assert draft.paynow_amount is None

@@ -16,13 +16,21 @@ UNCLEAR_REPLY = (
 
 
 class ChatService:
-    def __init__(self, repository, catalogue, ai_service, context_limit=20):
+    def __init__(
+        self,
+        repository,
+        catalogue,
+        ai_service,
+        context_limit=20,
+        master_invoice_service=None,
+    ):
         self.repository = repository
         self.catalogue = catalogue
         self.ai_service = ai_service
         self.context_limit = context_limit
         self.enrollment = EnrollmentService(ai_service, catalogue, repository)
         self.faq_attachments = FAQAttachmentCatalogue()
+        self.master_invoice_service = master_invoice_service
 
     def respond(self, conversation, user_text):
         user_message = self.repository.add_message(
@@ -37,6 +45,44 @@ class ChatService:
         ][-self.context_limit :]
 
         draft = conversation.enrollment_draft
+        greeting = _greeting_salutation(user_text)
+        if greeting:
+            name = _first_name(draft.full_name) if draft else None
+            if draft and conversation.active_intent == "enrollment" and draft.status not in {
+                "confirmed",
+                "awaiting_course_date",
+                "cancelled",
+            }:
+                personal = f", {name}" if name else ""
+                reply = (
+                    f"{greeting}{personal}! 👋 We can continue your enrolment. "
+                    f"{self.enrollment.next_step_prompt(draft)}"
+                )
+            else:
+                reply = (
+                    f"{greeting}! 👋 How can I help you today? You can ask about "
+                    "our courses, fees, SkillsFuture support, or start an enrolment."
+                )
+            assistant_message = self.repository.add_message(
+                conversation,
+                "assistant",
+                reply,
+                agent_name="intent_classifier",
+                detected_intent="unclear",
+                classification_confidence=1.0,
+            )
+            db.session.commit()
+            return {
+                "conversation_id": conversation.id,
+                "message": serialize_message(assistant_message),
+                "routing": {
+                    "intent": "unclear",
+                    "confidence": 1.0,
+                    "agent": "intent_classifier",
+                },
+                "enrollment": serialize_enrollment(draft, self.catalogue),
+            }
+
         classification = self.ai_service.classify(
             message=redact_for_classification(user_text),
             context=self._format_context(prior_messages, redact=True),
@@ -50,6 +96,7 @@ class ChatService:
         user_message.detected_intent = classification.intent
         user_message.classification_confidence = classification.confidence
 
+        confirmed_now = False
         if classification.intent == "faq":
             name = _first_name(draft.full_name) if draft else None
             faq_result = self.ai_service.answer_faq(
@@ -74,10 +121,14 @@ class ChatService:
                 reply = self.catalogue.ground_faq_answer(approved_reply)
             reply = clean_customer_copy(reply)
             agent_name = "faq_agent"
-            if draft and draft.status != "confirmed":
+            if draft and draft.status not in {
+                "confirmed",
+                "awaiting_course_date",
+                "cancelled",
+            }:
                 if name and reply != self.catalogue.no_intakes_message:
                     reply = _personalise_reply(reply, name)
-                continuation = self.catalogue.enrollment_faq_resume_prompt
+                continuation = self.enrollment.next_step_prompt(draft)
                 reply += f"\n\n{continuation}"
             else:
                 if name and reply != self.catalogue.no_intakes_message:
@@ -89,6 +140,7 @@ class ChatService:
             )
         elif classification.intent == "enrollment":
             conversation.active_intent = "enrollment"
+            was_confirmed = bool(draft and draft.confirmed_at)
             reply, draft = self.enrollment.handle(
                 conversation,
                 user_text,
@@ -96,6 +148,7 @@ class ChatService:
             )
             agent_name = "enrollment_agent"
             attachment = None
+            confirmed_now = bool(draft.confirmed_at) and not was_confirmed
         else:
             reply = UNCLEAR_REPLY
             agent_name = "intent_classifier"
@@ -113,6 +166,14 @@ class ChatService:
             image_status=attachment["image_status"] if attachment else None,
         )
         db.session.commit()
+
+        if confirmed_now and self.master_invoice_service is not None:
+            try:
+                self.master_invoice_service.queue_and_export(draft)
+            except Exception:
+                # The confirmed database record is deliberately independent of the
+                # recoverable workbook export.
+                db.session.rollback()
 
         return {
             "conversation_id": conversation.id,
@@ -164,11 +225,49 @@ def serialize_message(message):
 
 def serialize_enrollment(draft, catalogue=None):
     if draft is None:
-        return {"status": None, "missing_fields": []}
+        return {
+            "status": None,
+            "missing_fields": [],
+            "demo_intakes_enabled": bool(
+                catalogue and catalogue.enable_demo_intakes
+            ),
+            "selected_intake": None,
+        }
+    selected_intake = None
+    if draft.intake_start_date:
+        selected_intake = {
+            "id": draft.intake_id,
+            "start_date": draft.intake_start_date.isoformat(),
+            "end_date": (
+                draft.intake_end_date or draft.intake_start_date
+            ).isoformat(),
+            "display_date": _display_intake_range(
+                draft.intake_start_date,
+                draft.intake_end_date or draft.intake_start_date,
+            ),
+            "is_demo": bool(draft.intake_is_demo),
+        }
     return {
         "status": draft.status,
         "missing_fields": EnrollmentService.missing_fields(draft, catalogue),
+        "demo_intakes_enabled": bool(
+            catalogue and catalogue.enable_demo_intakes
+        ),
+        "selected_intake": selected_intake,
     }
+
+
+def _display_intake_range(start, end):
+    if start == end:
+        return f"{start.day} {start.strftime('%B %Y')}"
+    if start.year == end.year and start.month == end.month:
+        return f"{start.day}–{end.day} {start.strftime('%B %Y')}"
+    if start.year == end.year:
+        return f"{start.day} {start.strftime('%B')}–{end.day} {end.strftime('%B %Y')}"
+    return (
+        f"{start.day} {start.strftime('%B %Y')}–"
+        f"{end.day} {end.strftime('%B %Y')}"
+    )
 
 
 def clean_customer_copy(content):
@@ -193,7 +292,14 @@ def clean_customer_copy(content):
         "",
         cleaned,
     )
-    cleaned = re.sub(r"(?i)\b(?:fictional|synthetic|mock|prototype)\b\s*", "", cleaned)
+    cleaned = "\n".join(
+        line
+        if re.match(r"(?i)^demo (?:intake dates|note):?", line.strip())
+        else re.sub(
+            r"(?i)\b(?:fictional|synthetic|mock|prototype)\b\s*", "", line
+        )
+        for line in cleaned.splitlines()
+    )
     cleaned = re.sub(r"[ \t]+\n", "\n", cleaned)
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned).strip()
     if re.search(
@@ -242,3 +348,29 @@ def _personalise_reply(reply, first_name):
     if re.search(rf"(?i)\b{re.escape(first_name)}\b", reply):
         return reply
     return f"Hi {first_name} 👋\n\n{reply}"
+
+
+def _greeting_salutation(message):
+    normalized = re.sub(r"[^a-z\s]", "", (message or "").casefold())
+    normalized = " ".join(normalized.split())
+    greetings = {
+        "good morning": "Good morning",
+        "gud morning": "Good morning",
+        "morning": "Good morning",
+        "morningg": "Good morning",
+        "good afternoon": "Good afternoon",
+        "gud afternoon": "Good afternoon",
+        "afternoon": "Good afternoon",
+        "good evening": "Good evening",
+        "gud evening": "Good evening",
+        "evening": "Good evening",
+        "hi": "Hi",
+        "hii": "Hi",
+        "hello": "Hello",
+        "helo": "Hello",
+        "hey": "Hey",
+        "heyy": "Hey",
+        "greeting": "Hello",
+        "greetings": "Hello",
+    }
+    return greetings.get(normalized)

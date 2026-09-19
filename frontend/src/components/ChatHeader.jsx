@@ -1,4 +1,4 @@
-export default function ChatHeader({ onNewChat, disabled }) {
+export default function ChatHeader({ onNewChat, disabled, demoMode = false }) {
   return (
     <header className="chat-header">
       <div className="brand-mark" aria-hidden="true">
@@ -9,6 +9,7 @@ export default function ChatHeader({ onNewChat, disabled }) {
         <p>Course Enquiry &amp; Enrollment Assistant</p>
       </div>
       <div className="header-actions">
+        {demoMode && <span className="demo-mode-badge">Demo intake dates</span>}
         <span className="online-status">
           <span aria-hidden="true">●</span> Online
         </span>
